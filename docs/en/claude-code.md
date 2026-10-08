@@ -206,7 +206,7 @@ On screen, a pet shows the session name, the git branch and the tool in use. The
 - A collision is seen only when the other session wrote the file with `Edit` or `Write`. A file changed by a command (`sed`, a script, a formatter) has no known author: nothing is shown.
 - `Stop` also fires on `/clear` and on a compaction: the pet then jumps although no task is done.
 - Subagents are followed through the `SubagentStart` and `SubagentStop` events, by id: a `SubagentStop` with no known `SubagentStart` is ignored, Claude Code sends some at the end of each turn. A missed `SubagentStop` leaves a small pet until the session closes.
-- The name of a subagent is the description of the `Agent` tool started just before it. Two subagents started at the same time may swap their names.
+- The name of a subagent is the description of the `Agent` tool started just before it. Two subagents started at the same time may swap their names. A subagent the session gives more work to starts again under the same name.
 - A subagent tells neither that it waits nor that it thinks: its small pet plays, whatever it does.
 - The "Advising using" line is the one of Claude Code 2.1. If a version changes it, the sage goes back to the scene after the fact. A call made before Paros started is not seen.
 - The script needs a POSIX shell. On Windows, Claude Code runs hooks with Git Bash.

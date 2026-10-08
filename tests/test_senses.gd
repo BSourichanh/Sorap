@@ -148,6 +148,10 @@ func test_hook_lines_become_events() -> void:
 	sense._poll()
 	check(&"session_finished" in event_names(), "end of turn")
 	check_equal(last_event(&"session_phase").get("phase"), &"working", "the question is answered")
+
+	write(sense._log_path, text + "\t".join(["Stop", SESSION, "", "", "", "", ""]) + "\n" + "\t".join(["SubagentStart", SESSION, "", "", "", "", "a1"]) + "\n")
+	sense._poll()
+	check_equal(last_event(&"session_subagents").get("agents")[-1].name, "Find the bug", "a subagent given more work starts again under its name")
 	sense.free()
 
 

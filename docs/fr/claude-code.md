@@ -206,7 +206,7 @@ Sous Linux, avec le réglage « Lire les terminaux pour voir l'advisor au travai
 - Une tâche en arrière-plan sans avis de fin au bout de 30 minutes est oubliée, sauf si le registre dit qu'une commande tourne encore : le personnage retourne au repos.
 - `Stop` se déclenche aussi sur `/clear` et sur un compactage : le personnage saute alors sans qu'une tâche soit finie.
 - Les sous-agents sont suivis par les événements `SubagentStart` et `SubagentStop`, par identifiant : un `SubagentStop` sans `SubagentStart` connu est ignoré, Claude Code en envoie à chaque fin de tour. Un `SubagentStop` manqué laisse un petit personnage jusqu'à la fermeture de la session.
-- Le nom d'un sous-agent est la description de l'outil `Agent` lancé juste avant lui. Deux sous-agents lancés en même temps peuvent échanger leurs noms.
+- Le nom d'un sous-agent est la description de l'outil `Agent` lancé juste avant lui. Deux sous-agents lancés en même temps peuvent échanger leurs noms. Un sous-agent à qui la session redonne du travail repart sous le même nom.
 - Un sous-agent ne dit ni qu'il attend ni qu'il réfléchit : son petit personnage joue, quoi qu'il fasse.
 - La ligne « Advising using » est celle de Claude Code 2.1 en anglais. Si une version la change, le sage revient à la scène après coup. Un appel fait avant le lancement de Paros n'est pas vu.
 - Le script demande un shell POSIX. Sous Windows, Claude Code lance les hooks avec Git Bash.

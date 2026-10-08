@@ -130,7 +130,8 @@ var _terminals_path := Desktop.advising_path()
 var _log_offset := 0
 ## Session id -> the SHOWN fields, plus phase, asking, subagents (agent id ->
 ## {id, name, tool, detail}, the ones running), launching (descriptions of
-## the subagents asked for and not started yet), advising (true while the
+## the subagents asked for and not started yet), names (agent id -> the
+## description it was started with, kept for when it starts again), advising (true while the
 ## advisor is asked), live (true when a terminal tells so), live_since (Unix
 ## time of the call the terminal showed), sign (Unix time of its last sign of
 ## life: a hook event of its own, or a line added to its transcript), transcript,
@@ -218,7 +219,7 @@ func _update(id: String, entry: Dictionary) -> void:
 		_sessions[id] = {
 			"name": "", "color": "", "cwd": "", "last_prompt": "", "pid": 0, "context": 0, "summary": "",
 			"phase": &"", "asking": false, "advising": false, "live": false, "live_since": 0.0, "sign": Time.get_unix_time_from_system(),
-			"subagents": {}, "launching": [], "transcript": "", "transcript_offset": 0,
+			"subagents": {}, "launching": [], "names": {}, "transcript": "", "transcript_offset": 0,
 			"heard": _now(), "quiet": 0, "tasks": {}, "launches": {}, "writes": {}, "background": 0, "servers": 0, "queue": [], "mail": 0, "known": false,
 			"origin": &"", "asker": "",
 		}
@@ -498,7 +499,10 @@ func _handle_hook(fields: PackedStringArray) -> void:
 			# at the end of each turn among others: only a known id counts.
 			if event == "SubagentStart":
 				# The tool that asked for it came just before, with its description.
-				var name: String = session.launching.pop_front() if not session.launching.is_empty() else ""
+				# A subagent that is given more work starts again under the same
+				# id, with no such tool: it keeps the name it had.
+				var name: String = session.launching.pop_front() if not session.launching.is_empty() else session.names.get(agent, "")
+				session.names[agent] = name
 				session.subagents[agent] = {"id": agent, "name": name, "tool": "", "detail": ""}
 			elif not session.subagents.erase(agent):
 				return
