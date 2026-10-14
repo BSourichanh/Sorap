@@ -4,6 +4,7 @@ extends Node
 ## One pet per Claude Code session. With no session, one pet with no name.
 ## One small pet per running subagent, beside the pet of its session.
 ## One sage beside a pet whose session asks the advisor.
+## A pet whose session compacts its context throws away sheets of its head.
 
 ## Key of the pet shown when no session exists.
 const NO_SESSION := ""
@@ -63,6 +64,10 @@ const SAGE_MAX_SECONDS := 900.0
 ## Once it answered, the sage walks off the screen. It is removed there, or
 ## after this many seconds: it may be held back on its way.
 const SAGE_LEAVE_SECONDS := 30.0
+## A compaction is shown at least this long: without the PreCompact hook, it
+## is told once over. And no longer than that, should its end be missed.
+const COMPACT_MIN_SECONDS := 6.0
+const COMPACT_MAX_SECONDS := 900.0
 const SmallPets := preload("res://src/brain/small_pets.gd")
 
 @export var pets: Pets
@@ -80,7 +85,9 @@ var _music := false
 ## session it wrote to in that turn), "owed" (a cheer held back by a turn that
 ## ended on a wait), "sage" (&"asked" while its sage reads, &"leaving" once it
 ## answered), "sage_since", "sage_done" (when the sage answers) and
-## "sage_gone" (when it is removed). Times are Unix times.
+## "sage_gone" (when it is removed), "compact" (true while its pet shows a
+## compaction), "compact_since" and "compact_done" (when the pet stops showing
+## it). Times are Unix times.
 var _sessions := {}
 ## Frame of the focused window. No size: none, or not known.
 var _active_window := Rect2()
@@ -198,6 +205,13 @@ func _on_sensed(event: StringName, data: Dictionary) -> void:
 				_call_sage(data.session)
 			else:
 				_sage_answers(data.session)
+		&"session_compacting":
+			if data.compacting:
+				_start_compaction(data.session)
+			else:
+				var session: Dictionary = _sessions[data.session]
+				if session.get("compact", false):
+					session.compact_done = minf(session.compact_done, maxf(_now(), session.compact_since + COMPACT_MIN_SECONDS))
 		&"session_finished":
 			var session: Dictionary = _sessions[data.session]
 			# The turn is over: so is the question to the advisor.
@@ -329,6 +343,7 @@ func _tick() -> void:
 ## each pet.
 func _refresh() -> void:
 	_run_sages()
+	_run_compactions()
 	for key: String in pets.keys():
 		var pet := pets.find(key)
 		var session: Dictionary = _sessions.get(key, {})
@@ -382,6 +397,7 @@ func _dress(pet: Pet, session: Dictionary) -> void:
 	pet.fullness = session.context / (Settings.value("claude", "context_window_k") * 1000.0)
 	pet.baggage = BAGGAGE_LEVELS.filter(func(level: int) -> bool: return session.get("dirty", 0) >= level).size()
 	pet.hard_hat = session.get("conflict", false)
+	pet.strained = session.get("compact", false) and session.get("auto", false)
 	pet.lost = session.get("behind", 0) > 0
 	pet.dispute = session.get("dispute", "") if _now() < session.get("dispute_until", 0.0) else ""
 
@@ -391,6 +407,8 @@ func _wish(session: Dictionary) -> Pet.Wish:
 	var phase: StringName = session.get("phase", &"idle")
 	if phase == &"waiting":
 		return Pet.Wish.ALERT
+	if session.get("compact", false):
+		return Pet.Wish.COMPACT
 	if phase == &"working":
 		return Pet.Wish.THINK
 	if _awaits(session):
@@ -526,6 +544,28 @@ func _send_to_knock(pet: Pet) -> void:
 	pet.knock_at(edge - side * KNOCK_REACH * pet.scale_factor(), side)
 
 
+## The session compacts its context: its pet sits by a bin and throws away
+## sheets of its head.
+func _start_compaction(key: String) -> void:
+	var session: Dictionary = _sessions[key]
+	if session.get("compact", false):
+		return
+	session.compact = true
+	session.compact_since = _now()
+	session.compact_done = INF
+	pets.find(key).say(tr("Context full: compacting") if session.get("auto", false) else tr("Compacting the context"))
+
+
+## Once the compaction is over and was seen, the pet shakes its head.
+func _run_compactions() -> void:
+	for key: String in _sessions:
+		var session: Dictionary = _sessions[key]
+		if session.get("compact", false) and _now() >= minf(session.compact_done, session.compact_since + COMPACT_MAX_SECONDS):
+			session.compact = false
+			pets.find(key).shake_off()
+			pets.find(key).say(tr("Context compacted"))
+
+
 ## Builds the tower of the sessions at rest, one pet per second, and brings
 ## it down when one of them is no longer at rest.
 func _grow_tower() -> void:
@@ -574,7 +614,7 @@ func _fell_tower() -> void:
 ## True when the session of the pet has been at rest long enough for the tower.
 func _rests(pet: Pet) -> bool:
 	var session: Dictionary = _sessions.get(pet.key, {})
-	return session.get("phase") == &"idle" and not _awaits(session) and _now() - session.since >= TOWER_AFTER_SECONDS
+	return session.get("phase") == &"idle" and not _awaits(session) and not session.get("compact", false) and _now() - session.since >= TOWER_AFTER_SECONDS
 
 
 ## Head of the pet below, for the pet at the given level of the tower.
@@ -620,6 +660,8 @@ func _card(session: Dictionary) -> String:
 				lines.append(tr("Waiting for the answer of %s for %s") % [_sessions[session.asked].name, lasted])
 			_:
 				lines.append(tr("Waiting for a background task for %s" if _awaits(session) else "At rest for %s") % lasted)
+		if session.get("compact", false):
+			lines.append(tr("Compacting the context for %s") % _duration(_now() - session.compact_since))
 		if session.get("count", 0) > 0:
 			lines.append(tr("Subagents running: %d") % session.count)
 			for agent: Dictionary in session.get("agents", []):

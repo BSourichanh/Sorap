@@ -87,6 +87,24 @@ const HOURGLASS_ROWS: Array[float] = [0.3, 0.7, 1.1, 1.4]
 ## Seconds the sand takes to run down, then the hourglass to turn over.
 const HOURGLASS_RUN := 5.0
 const HOURGLASS_TURN := 0.7
+## Wire bin on the ground in front of a pet that compacts its context: body,
+## rim and bars. x of its middle from the feet, in grid units.
+const BIN_X := 11.0
+const BIN: Array[Array] = [
+	[Rect2(BIN_X - 1.5, -3.2, 3.0, 3.2), Color("#8c8c8c")], [Rect2(BIN_X - 1.9, -3.6, 3.8, 0.5), Color("#5e5e5e")],
+	[Rect2(BIN_X - 0.8, -3.1, 0.3, 3.0), Color("#6e6e6e")], [Rect2(BIN_X + 0.5, -3.1, 0.3, 3.0), Color("#6e6e6e")],
+]
+## Balls of paper that pile up in the bin, one per sheet thrown: top left
+## corners, then their size, in grid units.
+const PAPER_BALLS: Array[Vector2] = [Vector2(BIN_X - 1.3, -4.6), Vector2(BIN_X, -4.8), Vector2(BIN_X - 0.6, -5.6)]
+const BALL := 1.2
+## Seconds per sheet: pulled out of the head, crumpled, then thrown. Share of
+## that time where the pull ends, then the crumple.
+const COMPACT_CYCLE := 2.4
+const COMPACT_PULL := 0.3
+const COMPACT_CRUMPLE := 0.55
+## Where the hand in front holds the sheet it crumples, in grid units.
+const COMPACT_HAND := Vector2(8.5, -6.5)
 ## Color the eyes of a pet that serves glow with, and the seconds of one
 ## glow. The eyes go back to dark in between: green alone does not show on
 ## every body color.
@@ -216,7 +234,7 @@ func _process(_delta: float) -> void:
 func _look() -> int:
 	return [
 		_pet.state, _pet.facing, _pet.label, _pet.color, _pet.accessory, _pet.caption, _pet.sheet, _pet.stature, _pet.sage,
-		_pet.urgent, _pet.hovered, _pet.fullness >= SMOKE_FROM, _pet.baggage, _pet.hard_hat, _pet.lost,
+		_pet.urgent, _pet.hovered, _pet.fullness >= SMOKE_FROM, _pet.strained, _pet.baggage, _pet.hard_hat, _pet.lost,
 		_pet.tapping, _pet.umbrella, _pet.meditating, _pet.headlamp, _pet.cool, _pet.discreet,
 		_pet.rooted, _pet.is_perched(), _pet.grooving, _pet.mail, _pet.mailbox_side(), _pet.serving,
 	].hash()
@@ -226,7 +244,7 @@ func _draw() -> void:
 	var state := _pet.state
 	var airborne := _pet.is_airborne() or state == Pet.State.CLIMB
 	var meditating := state == Pet.State.THINK and _pet.meditating
-	var seated := meditating or state in [Pet.State.SLEEP, Pet.State.SIT, Pet.State.ROAST, Pet.State.WAIT]
+	var seated := meditating or state in [Pet.State.SLEEP, Pet.State.SIT, Pet.State.ROAST, Pet.State.WAIT, Pet.State.COMPACT]
 	var still := state in [Pet.State.IDLE, Pet.State.SIT]
 	var grooving := _pet.grooving and (still or state == Pet.State.WAIT or (state == Pet.State.THINK and not meditating))
 	# Index of the arm on the side the pet faces, and of the other one.
@@ -277,6 +295,18 @@ func _draw() -> void:
 		Pet.State.NOD:
 			# The body dips twice.
 			rise = -absf(sin(_pet.state_time / Pet.TIMED[state] * TAU)) * 5.0
+		Pet.State.COMPACT:
+			# Up to the head to pull the sheet, down to crumple it, up to throw it.
+			var moment := _compact_moment()
+			if moment < COMPACT_PULL:
+				arm_raise[front] = 4.0
+			elif moment < COMPACT_CRUMPLE:
+				arm_raise[front] = 0.5
+			elif moment < COMPACT_CRUMPLE + 0.1:
+				arm_raise[front] = 2.0
+		Pet.State.SHAKE:
+			# Shakes its head, less and less.
+			shake = sin(_time * 40.0) * 3.0 * (1.0 - minf(_pet.state_time / Pet.TIMED[state], 1.0))
 		Pet.State.CLIMB, Pet.State.CARRIED, Pet.State.FALL:
 			arm_raise = [2.0, 2.0]
 	if _pet.sheet:
@@ -351,6 +381,8 @@ func _draw() -> void:
 		_draw_campfire(body_offset)
 	if state == Pet.State.WAIT:
 		_draw_hourglass()
+	if state == Pet.State.COMPACT:
+		_draw_compaction(body_offset)
 	if state == Pet.State.READ:
 		_blocks(SHEET, body_offset, true)
 	if _pet.sheet:
@@ -381,6 +413,14 @@ func _draw() -> void:
 				_blocks([[Rect2(8.5, -15, 1, 1), GOLD], [Rect2(10, -13.5, 0.8, 0.8), GOLD], [Rect2(9.6, -16.6, 0.8, 0.8), GOLD]], body_offset, true)
 		Pet.State.WORRY:
 			_block(Rect2(6.6, -10.5, 0.8, 1.6), body_offset, SWEAT)
+		Pet.State.COMPACT:
+			if _pet.strained:
+				# A drop that runs down the back of the head.
+				_blocks([[Rect2(-7.4, -10.5 + fmod(_time, 1.0) * 1.5, 0.8, 1.6), SWEAT]], body_offset, true)
+		Pet.State.SHAKE:
+			# Sparks: the head is light again.
+			if fmod(_time, 0.3) < 0.2:
+				_blocks([[Rect2(-7.5, -11.5, 0.8, 0.8), GOLD], [Rect2(6.8, -12.2, 0.8, 0.8), GOLD], [Rect2(-0.4, -13.2, 0.8, 0.8), GOLD]], body_offset, false)
 		Pet.State.CHEER:
 			_draw_hearts(body_top)
 	if _pet.lost and still and fmod(_time, 1.2) < 0.8:
@@ -439,6 +479,11 @@ func _draw_eyes(state: Pet.State, body_offset: Vector2, meditating: bool) -> voi
 		Pet.State.WORRY:
 			look = Vector2.ZERO
 			wide = true
+		Pet.State.COMPACT:
+			# Up at the sheet it pulls out of its head, then at the bin.
+			look = Vector2(0, -0.6) if _compact_moment() < COMPACT_PULL else Vector2(_pet.facing, 0.5)
+		Pet.State.SHAKE:
+			closed = true
 	if _pet.hovered and not closed:
 		# Follows the mouse while it is over the pet.
 		var head := _pet.body_point(GROUND + body_offset + Vector2(0, -7.0 * UNIT))
@@ -549,6 +594,42 @@ func _draw_hourglass() -> void:
 func _draw_band(side: float, from: float, to: float, half_width: float, color: Color) -> void:
 	if to > from:
 		draw_rect(Rect2(Vector2(-half_width, from if side > 0.0 else -to) * UNIT, Vector2(half_width * 2.0, to - from) * UNIT), color)
+
+
+## Share of the current sheet done, 0 to 1, for a pet that compacts.
+func _compact_moment() -> float:
+	return fmod(_pet.state_time, COMPACT_CYCLE) / COMPACT_CYCLE
+
+
+## Bin in front of the pet that compacts, with the balls of the sheets thrown
+## so far. And the sheet of the moment: it comes out of the top of the head,
+## is crumpled in the hand, then flies into the bin.
+func _draw_compaction(body_offset: Vector2) -> void:
+	var thrown := mini(int(_pet.state_time / COMPACT_CYCLE), PAPER_BALLS.size())
+	for i in thrown:
+		_blocks([[Rect2(PAPER_BALLS[i], Vector2.ONE * BALL), PAPER]], Vector2.ZERO, true)
+	_blocks(BIN, Vector2.ZERO, true)
+	var moment := _compact_moment()
+	if moment < COMPACT_PULL:
+		var out := moment / COMPACT_PULL * 3.2
+		# Beside the hand, raised at the corner of the head.
+		var sheet: Array[Array] = [[Rect2(3.6, -10.0 - out, 2.4, out), PAPER]]
+		for line: float in [0.8, 1.6]:
+			if out > line + 0.4:
+				sheet.append([Rect2(4.0, -10.0 - out + line, 1.6, 0.3), SMOKE])
+		_blocks(sheet, body_offset, true)
+	elif moment < COMPACT_CRUMPLE:
+		var size := lerpf(2.6, BALL, (moment - COMPACT_PULL) / (COMPACT_CRUMPLE - COMPACT_PULL))
+		_blocks([
+			[Rect2(COMPACT_HAND - Vector2.ONE * size / 2.0, Vector2.ONE * size), PAPER],
+			[Rect2(COMPACT_HAND - Vector2(0.4, 0.15), Vector2(0.6, 0.3)), SMOKE],
+		], body_offset, true)
+	else:
+		# From the hand, which moves with the body, to the bin, on the ground.
+		var flight := (moment - COMPACT_CRUMPLE) / (1.0 - COMPACT_CRUMPLE)
+		var bin_top := Vector2(BIN_X, -3.6)
+		var at := COMPACT_HAND.lerp(bin_top, flight) - Vector2(0, sin(flight * PI) * 4.0)
+		_blocks([[Rect2(at - Vector2.ONE * BALL / 2.0, Vector2.ONE * BALL), PAPER]], body_offset * (1.0 - flight), true)
 
 
 func _draw_smoke(body_top: Vector2) -> void:

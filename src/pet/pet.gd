@@ -5,10 +5,10 @@ extends Node2D
 
 enum State {
 	IDLE, SIT, WALK, SLEEP, STRETCH, THINK, ALERT, CHEER, GREET, GLARE, HIGH_FIVE, WORRY, ROAST,
-	KNOCK, SWEEP, CLIMB, CARRIED, FALL, WAIT, THROW, READ, NOD,
+	KNOCK, SWEEP, CLIMB, CARRIED, FALL, WAIT, THROW, READ, NOD, COMPACT, SHAKE,
 }
 ## Standing order from the brain. The pet obeys as soon as it is idle.
-enum Wish { ROAM, SLEEP, THINK, ALERT, WAIT, READ }
+enum Wish { ROAM, SLEEP, THINK, ALERT, WAIT, READ, COMPACT }
 
 const WISH_STATE := {
 	Wish.SLEEP: State.SLEEP,
@@ -17,6 +17,8 @@ const WISH_STATE := {
 	Wish.WAIT: State.WAIT,
 	# Reads on, as long as it is asked to.
 	Wish.READ: State.READ,
+	# Pulls sheets out of its head and throws them away.
+	Wish.COMPACT: State.COMPACT,
 }
 ## States that end on their own, with their duration in seconds.
 const TIMED := {
@@ -33,6 +35,7 @@ const TIMED := {
 	State.THROW: 0.5,
 	State.READ: 1.6,
 	State.NOD: 0.8,
+	State.SHAKE: 1.0,
 }
 ## States slow enough for a low frame rate.
 const CALM: Array[State] = [State.IDLE, State.SIT, State.SLEEP, State.THINK, State.WAIT]
@@ -128,6 +131,8 @@ var baggage := 0
 var hard_hat := false
 ## Looks at a map and scratches its head when it stands still.
 var lost := false
+## Sweats while it compacts: the context was full.
+var strained := false
 ## Taps its foot while it thinks.
 var tapping := false
 ## File the pet fights over with another one. Two pets with the same one are
@@ -240,10 +245,10 @@ func _process(delta: float) -> void:
 		State.SLEEP:
 			if wish != Wish.SLEEP:
 				_enter(State.STRETCH)
-		State.THINK, State.ALERT, State.WAIT:
+		State.THINK, State.ALERT, State.WAIT, State.COMPACT:
 			if WISH_STATE.get(wish) != state:
 				_enter(State.IDLE)
-		State.STRETCH, State.CHEER, State.GLARE, State.HIGH_FIVE, State.WORRY, State.ROAST, State.KNOCK, State.SWEEP, State.THROW, State.READ, State.NOD:
+		State.STRETCH, State.CHEER, State.GLARE, State.HIGH_FIVE, State.WORRY, State.ROAST, State.KNOCK, State.SWEEP, State.THROW, State.READ, State.NOD, State.SHAKE:
 			# A pet asked to read goes on: no moment without its letter in between.
 			if state_time >= TIMED[state] and WISH_STATE.get(wish) != state:
 				_enter(State.IDLE)
@@ -453,6 +458,11 @@ func sweep() -> void:
 ## Nods twice: done, with nothing to celebrate.
 func nod() -> void:
 	_play(State.NOD)
+
+
+## Shakes its head, lighter: a compaction is over.
+func shake_off() -> void:
+	_play(State.SHAKE)
 
 
 ## Turns toward the given screen x while it stays in place.

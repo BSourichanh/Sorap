@@ -128,6 +128,35 @@ func test_context_fills_the_head() -> void:
 	check_near(pet.fullness, 0.8, 0.001, "800 k tokens of 1000 k")
 
 
+func test_compaction_throws_sheets_in_the_bin() -> void:
+	var pet := open("s1")
+	set_phase("s1", &"working")
+	Events.post(&"session_compacting", {"session": "s1", "compacting": true, "auto": true})
+	check_equal(pet.wish, Pet.Wish.COMPACT, "compacts rather than thinks")
+	check(pet.strained, "sweats: the context was full")
+	check_equal(pet.get_node("../Bubble")._message, "Context full: compacting", "says so")
+	step(pet, 0.1)
+	check_equal(pet.state, Pet.State.COMPACT, "sits by its bin")
+	pet.hovered = true
+	brain._refresh()
+	check("Compacting the context for" in pet.get_node("../Bubble").card, "the card says so")
+	pet.hovered = false
+	set_phase("s1", &"idle", 200.0)
+	brain._tick()
+	check(not brain._rests(pet), "not at rest for the tower")
+
+	Events.post(&"session_compacting", {"session": "s1", "compacting": false, "auto": false})
+	check_equal(pet.state, Pet.State.COMPACT, "a quick compaction is seen a moment first")
+	brain._sessions["s1"].compact_since -= brain.COMPACT_MIN_SECONDS
+	brain._sessions["s1"].compact_done -= brain.COMPACT_MIN_SECONDS
+	brain._tick()
+	check_equal(pet.state, Pet.State.SHAKE, "then the pet shakes its head")
+	check_equal(pet.get_node("../Bubble")._message, "Context compacted", "lighter")
+	check(not pet.strained, "no more sweat")
+	step(pet, 1.5)
+	check_equal(pet.state, Pet.State.IDLE, "and goes on")
+
+
 func test_quiet_work_taps_then_meditates() -> void:
 	var pet := open("s1")
 	set_phase("s1", &"working")

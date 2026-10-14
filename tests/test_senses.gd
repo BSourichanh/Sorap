@@ -155,6 +155,59 @@ func test_hook_lines_become_events() -> void:
 	sense.free()
 
 
+func test_compaction_from_hooks_then_from_the_transcript() -> void:
+	var sense := claude_sense()
+	var transcript := folder.path_join("claude/projects/-work").path_join(SESSION + ".jsonl")
+	var usage := '{"type":"assistant","message":{"usage":{"input_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":800000}}}'
+	var boundary := '{"type":"system","subtype":"compact_boundary","content":"Conversation compacted","compactMetadata":{"trigger":"auto","preTokens":800000}}'
+	write(folder.path_join("claude/sessions/1.json"), registry(OS.get_process_id(), "busy"))
+	write(transcript, usage + "\n" + boundary.replace("auto", "manual") + "\n" + usage + "\n")
+	write(sense._log_path, "")
+	sense._poll()
+	check(&"session_compacting" not in event_names(), "a compaction made before Paros looked is old")
+
+	var log := "\t".join(["PreCompact", SESSION, "", "", "", "auto", ""]) + "\n"
+	write(sense._log_path, log)
+	sense._poll()
+	check_equal(last_event(&"session_compacting"), {"session": SESSION, "compacting": true, "auto": true}, "the hook tells the start, and that the context was full")
+	log += "\t".join(["Stop", SESSION, "", "", "", "", ""]) + "\n"
+	write(sense._log_path, log)
+	sense._poll()
+	check(&"session_finished" not in event_names(), "a Stop while it compacts ends no turn")
+	var file := FileAccess.open(transcript, FileAccess.READ_WRITE)
+	file.seek_end()
+	file.store_string(boundary + "\n")
+	file.close()
+	sense._poll()
+	check_equal(last_event(&"session_compacting").get("compacting"), false, "the transcript tells the end")
+	check_equal(last_event(&"session_changed").get("context"), 0, "the head is emptied")
+	record_events()
+	log += "\t".join(["PostCompact", SESSION, "", "", "", "auto", ""]) + "\n" + "\t".join(["Stop", SESSION, "", "", "", "", ""]) + "\n"
+	write(sense._log_path, log)
+	sense._poll()
+	check_equal(event_names().filter(func(name: StringName) -> bool: return name in [&"session_compacting", &"session_finished"]), [], "the hook after the line, and the Stop that follows: no news")
+
+	sense._sessions[SESSION].compacted -= sense.COMPACT_ECHO_SECONDS
+	file = FileAccess.open(transcript, FileAccess.READ_WRITE)
+	file.seek_end()
+	file.store_string(boundary.replace("auto", "manual") + "\n")
+	file.close()
+	sense._poll()
+	var told := _events.filter(func(event: Array) -> bool: return event[0] == &"session_compacting").map(func(event: Array) -> Array: return [event[1].compacting, event[1].auto])
+	check_equal(told, [[true, false], [false, false]], "without the hook, the line tells both, after the fact")
+
+	sense._sessions[SESSION].compacted -= sense.COMPACT_ECHO_SECONDS
+	log += "\t".join(["PreCompact", SESSION, "", "", "", "manual", ""]) + "\n"
+	write(sense._log_path, log)
+	sense._poll()
+	check_equal(last_event(&"session_compacting").get("compacting"), true, "compacts again")
+	log += "\t".join(["PreToolUse", SESSION, "", "Read", "x", "", ""]) + "\n"
+	write(sense._log_path, log)
+	sense._poll()
+	check_equal(last_event(&"session_compacting").get("compacting"), false, "a failed compaction ends with the next move of the session")
+	sense.free()
+
+
 func test_silent_work_gets_quiet() -> void:
 	var sense := claude_sense()
 	write(folder.path_join("claude/sessions/1.json"), registry(OS.get_process_id(), "busy"))
@@ -455,18 +508,20 @@ func test_hook_script_writes_one_line_per_event() -> void:
 		'{"session_id":"s1","hook_event_name":"Notification","message":"Claude needs your permission","notification_type":"permission_prompt"}',
 		'{"session_id":"s1","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"ls","description":"%s"}}' % "x".repeat(300),
 		'{"session_id":"s1","agent_id":"a1","agent_type":"general-purpose","hook_event_name":"SubagentStop","background_tasks":[{"id":"a2","type":"subagent","description":"Other agent"}]}',
+		'{"session_id":"s1","transcript_path":"/t.jsonl","cwd":"/y","hook_event_name":"PreCompact","trigger":"auto","custom_instructions":""}',
 	]
 	for input: String in runs:
 		write(folder.path_join("input.json"), input)
 		OS.execute("sh", ["-c", "XDG_RUNTIME_DIR='%s' '%s' < '%s'" % [folder, script, folder.path_join("input.json")]])
 	var lines := FileAccess.get_file_as_string(folder.path_join("paros/claude-events.log")).split("\n", false)
-	check_equal(lines.size(), 6, "one line per event")
+	check_equal(lines.size(), 7, "one line per event")
 	check_equal(Array(lines[0].split("\t")), ["PreToolUse", "s1", "", "Edit", "pet.gd", "", ""], "file name of an edit")
 	check_equal(Array(lines[1].split("\t")), ["PreToolUse", "s1", "", "Write", "pet_body.gd", "", ""], "file name of a Windows path")
 	check_equal(Array(lines[2].split("\t")), ["PostToolUse", "s1", "", "Bash", "Run unit tests", "test", ""], "a test command")
 	check_equal(Array(lines[3].split("\t")), ["Notification", "s1", "permission_prompt", "", "Claude needs your permission", "", ""], "a question")
 	check_equal(lines[4].split("\t")[4].length(), 120, "long detail cut")
 	check_equal(Array(lines[5].split("\t")), ["SubagentStop", "s1", "", "", "Other agent", "", "a1"], "id of the subagent")
+	check_equal(Array(lines[6].split("\t")), ["PreCompact", "s1", "", "", "", "auto", ""], "what started a compaction")
 
 
 func test_advisor_calls_are_read_from_the_transcript() -> void:

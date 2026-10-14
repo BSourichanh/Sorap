@@ -30,6 +30,10 @@ extends Node
 ##     A busy session reads them later, a session at rest at once,
 ##   session_collision {other, file, path}: the session could not write a file
 ##     because the session of id other had just changed it,
+##   session_compacting {compacting, auto}: the session compacts its context,
+##     then is done. auto: Claude Code did it because the context was full,
+##     not the user with /compact. The PreCompact hook tells the start. Without
+##     it, the transcript tells the end only: both come one after the other,
 ##   session_turn {origin, from}: a turn starts. origin: &"human" for a prompt
 ##     of the user, &"peer" for a message of another session, named by from,
 ##     &"task-notification" for the end of a background task, and others.
@@ -77,6 +81,16 @@ const TERMINALS_MARGIN_SECONDS := 2.0
 const ADVISOR_SAME_SECONDS := 15.0
 ## Hook events of the session itself that tell the advisor answered.
 const ADVISOR_OVER: Array[String] = ["PreToolUse", "Stop", "UserPromptSubmit"]
+## In the transcript line written at the end of a compaction, and in that line
+## when the context was full.
+const COMPACT_MARK := '"subtype":"compact_boundary"'
+const COMPACT_AUTO_MARK := '"trigger":"auto"'
+## Hook events of the session itself that tell a compaction is over. One that
+## fails tells no end: the next move of the session does.
+const COMPACT_OVER: Array[String] = ["PostCompact", "PreToolUse", "UserPromptSubmit"]
+## For this many seconds after a compaction, its echoes are no news: the Stop
+## Claude Code sends with it, the line of the transcript after the hook.
+const COMPACT_ECHO_SECONDS := 10.0
 ## Tools that start a subagent. Their description names it.
 const AGENT_TOOLS: Array[String] = ["Agent", "Task"]
 ## In the transcript line of an answer that starts a command in the background.
@@ -133,7 +147,8 @@ var _log_offset := 0
 ## the subagents asked for and not started yet), names (agent id -> the
 ## description it was started with, kept for when it starts again), advising (true while the
 ## advisor is asked), live (true when a terminal tells so), live_since (Unix
-## time of the call the terminal showed), sign (Unix time of its last sign of
+## time of the call the terminal showed), compacting (true while it compacts
+## its context), compacted (time the last compaction ended), sign (Unix time of its last sign of
 ## life: a hook event of its own, or a line added to its transcript), transcript,
 ## transcript_offset, heard (time of the last hook event), quiet, tasks
 ## (background task id -> {since: Unix time of its start, server}), launches
@@ -218,7 +233,7 @@ func _update(id: String, entry: Dictionary) -> void:
 	if opened:
 		_sessions[id] = {
 			"name": "", "color": "", "cwd": "", "last_prompt": "", "pid": 0, "context": 0, "summary": "",
-			"phase": &"", "asking": false, "advising": false, "live": false, "live_since": 0.0, "sign": Time.get_unix_time_from_system(),
+			"phase": &"", "asking": false, "advising": false, "compacting": false, "compacted": -INF, "live": false, "live_since": 0.0, "sign": Time.get_unix_time_from_system(),
 			"subagents": {}, "launching": [], "names": {}, "transcript": "", "transcript_offset": 0,
 			"heard": _now(), "quiet": 0, "tasks": {}, "launches": {}, "writes": {}, "background": 0, "servers": 0, "queue": [], "mail": 0, "known": false,
 			"origin": &"", "asker": "",
@@ -300,6 +315,8 @@ func _read_transcript(id: String, session: Dictionary) -> void:
 			_check_collision(line, id, session)
 		if ORIGIN_MARK in line and _read_origin(line, session) and session.known:
 			_post_turn(id, session)
+		if COMPACT_MARK in line:
+			_read_compaction(line, id, session)
 		if SUMMARY_MARK in line:
 			session.summary = _json_field(line, "content").trim_suffix(SUMMARY_HINT)
 		if line.begins_with(COLOR_LINE):
@@ -322,6 +339,18 @@ func _read_transcript(id: String, session: Dictionary) -> void:
 		elif USAGE_MARK in line:
 			session.context = _count_tokens(line)
 	session.transcript_offset = file.get_position()
+
+
+## The given transcript line ends a compaction: the context is near empty
+## until the next answer tells its size. Without hooks, the line alone tells
+## the compaction, after the fact.
+func _read_compaction(line: String, id: String, session: Dictionary) -> void:
+	session.context = 0
+	# Compactions made before the first reading are old.
+	if not session.known or _now() - session.compacted < COMPACT_ECHO_SECONDS:
+		return
+	_set_compacting(id, true, COMPACT_AUTO_MARK in line)
+	_set_compacting(id, false)
 
 
 ## Remembers the files that the answer of the given transcript line writes.
@@ -471,6 +500,8 @@ func _handle_hook(fields: PackedStringArray) -> void:
 		session.sign = Time.get_unix_time_from_system()
 		if event in ADVISOR_OVER:
 			_set_advising(id, false)
+		if event in COMPACT_OVER:
+			_set_compacting(id, false)
 	session.heard = _now()
 	# Any later event means the question was answered.
 	session.asking = event == "Notification" and fields[Field.NOTIFICATION] in ASKING
@@ -507,9 +538,15 @@ func _handle_hook(fields: PackedStringArray) -> void:
 			elif not session.subagents.erase(agent):
 				return
 			_post_subagents(id)
+		"PreCompact":
+			if agent.is_empty():
+				_set_compacting(id, true, fields[Field.KIND] == "auto")
 		"Stop":
 			if agent.is_empty():
 				session.launching.clear()
+			# Claude Code also sends it around a compaction: no turn ended.
+			if session.compacting or _now() - session.compacted < COMPACT_ECHO_SECONDS:
+				return
 			Events.post(&"session_finished", {"session": id})
 
 
@@ -561,6 +598,16 @@ func _set_advising(id: String, asking: bool) -> void:
 	if _sessions[id].advising != asking:
 		_sessions[id].advising = asking
 		Events.post(&"session_advisor", {"session": id, "asking": asking})
+
+
+func _set_compacting(id: String, compacting: bool, auto := false) -> void:
+	var session: Dictionary = _sessions[id]
+	if session.compacting == compacting:
+		return
+	session.compacting = compacting
+	if not compacting:
+		session.compacted = _now()
+	Events.post(&"session_compacting", {"session": id, "compacting": compacting, "auto": auto})
 
 
 func _post_subagents(id: String) -> void:
