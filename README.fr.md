@@ -16,6 +16,7 @@ Godot 4.7, GDScript. Aucun fichier image ni son : tout est dessiné et synthéti
 - **Il montre l'état de la session.** Il réfléchit quand Claude travaille, avec l'outil en cours au-dessus de la tête. Il agite les bras quand Claude attend une permission ou une réponse. Il saute quand le tour est fini.
 - **Il réagit à ton travail.** Tests verts ou rouges, commandes échouées, contexte plein, modifications non commitées, fusion en cours, commit propre.
 - **Chaque sous-agent a son petit personnage.** Il reste près du grand, affiche son outil en cours, et joue comme un enfant : il saute, court vers les autres, monte des pyramides avec eux. Seize au plus par session.
+- **Il se vide la tête quand le contexte est compacté.** Assis près d'une corbeille, il sort des feuilles de sa tête, les froisse et les y jette, puis secoue la tête, plus léger.
 - **Le sage vient quand la session consulte l'advisor.** Chapeau pointu, barbe blanche et bâton : il lit la lettre que le personnage lui lance, répond, puis sort de l'écran.
 - **Il vit sur le bureau.** Il traverse les écrans, s'assoit, dort la nuit, salue les autres personnages, se laisse lancer, grimpe sur la fenêtre active.
 - **Il ne gêne pas.** Un clic à côté de lui le traverse. Il quitte l'écran d'une application en plein écran.

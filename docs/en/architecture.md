@@ -89,15 +89,15 @@ Requests go the other way, as one file per request in `requests/`: `focus` (rais
 
 ### Wish and state
 
-The brain gives a **wish** (`Pet.Wish`): `ROAM`, `SLEEP`, `THINK`, `ALERT`, `WAIT`, `READ`. It is a standing order. The pet obeys as soon as it is at rest: a cheer in progress ends first.
+The brain gives a **wish** (`Pet.Wish`): `ROAM`, `SLEEP`, `THINK`, `ALERT`, `WAIT`, `READ`, `COMPACT`. It is a standing order. The pet obeys as soon as it is at rest: a cheer in progress ends first.
 
 The **state** (`Pet.State`) is what the pet does right now:
 
 | State | End |
 |---|---|
 | `IDLE`, `SIT`, `WALK` | Random duration, or change of wish |
-| `SLEEP`, `THINK`, `ALERT`, `WAIT` | When the wish changes. `SLEEP` goes through `STRETCH` |
-| `STRETCH`, `CHEER`, `GREET`, `GLARE`, `HIGH_FIVE`, `WORRY`, `ROAST`, `KNOCK`, `SWEEP`, `THROW`, `READ`, `NOD` | Fixed duration, in `Pet.TIMED`. `READ` lasts as long as the wish is `READ` |
+| `SLEEP`, `THINK`, `ALERT`, `WAIT`, `COMPACT` | When the wish changes. `SLEEP` goes through `STRETCH` |
+| `STRETCH`, `CHEER`, `GREET`, `GLARE`, `HIGH_FIVE`, `WORRY`, `ROAST`, `KNOCK`, `SWEEP`, `THROW`, `READ`, `NOD`, `SHAKE` | Fixed duration, in `Pet.TIMED`. `READ` lasts as long as the wish is `READ` |
 | `CLIMB` | Arrival on the perch |
 | `CARRIED` | When the mouse lets go |
 | `FALL` | Landing |
@@ -129,6 +129,7 @@ All carry `session`, the session id.
 | `session_subagents` | `count`, `agents` (`id`, `name`, `tool` and `detail` of each) | A small pet per subagent, with its caption |
 | `session_background` | `background`, `servers` | Hourglass while the turn is over and a background task still runs. No "Task done!". Green eyes while a server runs |
 | `session_advisor` | `asking` | The sage comes, reads a letter, answers and walks off the screen |
+| `session_compacting` | `compacting`, `auto` | The pet sits by a bin and throws away sheets of its head, then shakes its head. Sweats when the context was full |
 | `session_message_sent` | `to`, the name of a session | The pet throws a letter to the pet of that session. Once its turn is over, it waits for the answer while that session works |
 | `session_mail` | `mail` | Mailbox while messages of other sessions wait to be read. Reading of the letter when one leaves |
 | `session_collision` | `other`, `file`, `path` | The two pets glare, bubble, sound. Rivals for 10 minutes |

@@ -16,6 +16,7 @@ Built with Godot 4.7 and GDScript. No image file and no sound file: everything i
 - **It shows the session state.** Thinking while Claude works, with the tool in use above its head. Waving its arms when Claude waits for a permission or an answer. Jumping when the turn is over.
 - **It reacts to your work.** Green or red tests, failed commands, a full context window, uncommitted changes, a merge in progress, a clean commit.
 - **Each subagent has its small pet.** It stays near the big one, shows the tool it uses, and plays like a child: it jumps, runs to the others, builds pyramids with them. Sixteen at most per session.
+- **It empties its head when the context is compacted.** It sits by a bin, pulls sheets out of its head, crumples them and throws them in, then shakes its head, lighter.
 - **The sage comes when the session asks the advisor.** Pointy hat, white beard and staff: it reads the letter the pet throws to it, answers, then walks off the screen.
 - **It lives on your desktop.** It walks across your screens, sits, sleeps at night, greets the other pets, can be thrown around, and climbs onto the focused window.
 - **It stays out of the way.** Clicks next to it go through. It leaves a screen that runs a full screen app.

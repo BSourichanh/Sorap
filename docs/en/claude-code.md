@@ -22,6 +22,7 @@ Paros follows the interactive Claude Code sessions of the machine, for the curre
 | Could not write a file that another session had just changed | The two pets turn to each other and glare. Bubble with the file and the other session, two falling notes. For 10 minutes they glare again when they meet |
 | At rest | Walks, sits, sleeps |
 | Context 75 % full or more | Its head smokes |
+| Compacted its context | For a few seconds, after the fact: see [Compaction](#compaction) |
 | Closed | The pet goes away |
 
 ### With the hooks
@@ -36,6 +37,7 @@ Paros follows the interactive Claude Code sessions of the machine, for the curre
 | Tool started by a subagent | Short caption above its small pet: "Read · pet.gd". One line, cut when it is long. The caption of the big pet does not change |
 | Tool failed in a subagent | Its small pet shakes. No sound |
 | Subagent done | Its small pet jumps, hearts, then runs back to the big one and is gone |
+| Compaction started | Sits by a bin, pulls sheets out of its head and throws them in. See [Compaction](#compaction) |
 | Advisor asked | The sage comes: a bigger pet, with a pointy hat, a white beard and a staff. See [Advisor](#advisor) |
 | Tests passed | Jump, bubble "Green tests!" |
 | Tests failed | Shakes, bubble "Red tests", two falling notes |
@@ -135,13 +137,26 @@ Without this program (Windows, terminal not recognized, background tab, text scr
 
 Two settings: "The sage comes when the advisor is asked", and "Read the terminals to see the advisor at work".
 
+## Compaction
+
+When the context of a session is full, Claude Code compacts it: it sums up the conversation and starts again from that summary. The user can also ask for it with `/compact`. It takes from a few seconds to two minutes.
+
+1. The pet sits, with a wire bin on the ground in front of it. The bubble says "Compacting the context", or "Context full: compacting" when Claude Code did it by itself.
+2. It pulls a sheet out of the top of its head, crumples it into a ball, and throws it into the bin. Then the next one. The balls pile up in the bin.
+3. When the context was full, a drop of sweat runs down the back of its head.
+4. At the end, the bin goes away. The pet stands up, shakes its head, and sparks fly: "Context compacted". The smoke stops: the context is near empty until the next answer tells its size.
+
+The hover card reads "Compacting the context for", with the time. A pet that compacts does not join the tower, and the end of a compaction is not the end of a task: no "Task done!".
+
+The `PreCompact` hook tells the start, the `PostCompact` hook and the transcript tell the end. Without the hooks, only the transcript tells it, once over: the scene then plays after the fact, for 6 seconds. A compaction that fails tells no end: the next tool, or the next prompt, ends the scene.
+
 ## Where the information comes from
 
 | Source | Gives | Note |
 |---|---|---|
 | `~/.claude/sessions/<pid>.json` | Open sessions, name, folder, status (`busy`, `waiting`, `idle`, `shell`) | Internal Claude Code format, not documented: an update may change it |
-| Session transcript, in `~/.claude/projects/` | Color (`/color`), last prompt, summary, context tokens, background tasks, messages between sessions, files written, calls to the advisor | Only the lines added since the last reading are read |
-| `$XDG_RUNTIME_DIR/paros/claude-events.log` | Tools, subagents, failures, end of turn, permission requests | Written by `hooks/claude-hook.sh` |
+| Session transcript, in `~/.claude/projects/` | Color (`/color`), last prompt, summary, context tokens, background tasks, messages between sessions, files written, calls to the advisor, end of a compaction | Only the lines added since the last reading are read |
+| `$XDG_RUNTIME_DIR/paros/claude-events.log` | Tools, subagents, failures, end of turn, permission requests, compactions | Written by `hooks/claude-hook.sh` |
 | Session folder | Git status | Through the `git` command |
 
 If `CLAUDE_CONFIG_DIR` is set, it replaces `~/.claude`.
@@ -154,7 +169,7 @@ The context tokens are the sum of the input tokens of the last answer of the mod
 
 ## Installing the hooks
 
-In `~/.claude/settings.json`, declare the script for each of these events: `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `SubagentStart`, `SubagentStop`, `Stop`.
+In `~/.claude/settings.json`, declare the script for each of these events: `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `SubagentStart`, `SubagentStop`, `Stop`, `PreCompact`, `PostCompact`.
 
 ```json
 {
@@ -171,7 +186,7 @@ In `~/.claude/settings.json`, declare the script for each of these events: `User
 
 On Windows, write the command as `sh "C:/path/to/Paros/hooks/claude-hook.sh"` (forward slashes, run by Git Bash).
 
-Repeat the same block for the six other events. Hooks in `~/.claude/settings.json` apply to every session of the user, whatever the project. A session that is already open picks them up without a restart.
+Repeat the same block for the eight other events. Hooks in `~/.claude/settings.json` apply to every session of the user, whatever the project. A session that is already open picks them up without a restart.
 
 The script cannot disturb a session: it runs in the background (`async`), prints nothing and always exits with 0.
 
@@ -186,7 +201,7 @@ One line per event, seven fields separated by tabs:
 | Notification type | `permission_prompt` |
 | Tool | `Edit` |
 | Detail, 120 characters at most | Name of the file touched, else description of the command, else message of the notification |
-| Kind | `test` when the command runs tests, empty otherwise |
+| Kind | `test` when the command runs tests. For a compaction, what started it: `auto` (context full) or `manual` (`/compact`). Empty otherwise |
 | Agent | Id of the subagent the event comes from, empty for the session |
 
 ## Privacy
@@ -204,7 +219,7 @@ On screen, a pet shows the session name, the git branch and the tool in use. The
 - A letter flies only to a session that has a pet, found by its name: a message to a session on another machine, or to a subagent, shows nothing. With two sessions of the same name, the letter goes to the first one found.
 - A message of a session without pet gets no flight: the letter is in the mailbox at once.
 - A collision is seen only when the other session wrote the file with `Edit` or `Write`. A file changed by a command (`sed`, a script, a formatter) has no known author: nothing is shown.
-- `Stop` also fires on `/clear` and on a compaction: the pet then jumps although no task is done.
+- `Stop` also fires on `/clear`: the pet then jumps although no task is done. The one sent around a compaction is ignored.
 - Subagents are followed through the `SubagentStart` and `SubagentStop` events, by id: a `SubagentStop` with no known `SubagentStart` is ignored, Claude Code sends some at the end of each turn. A missed `SubagentStop` leaves a small pet until the session closes.
 - The name of a subagent is the description of the `Agent` tool started just before it. Two subagents started at the same time may swap their names. A subagent the session gives more work to starts again under the same name.
 - A subagent tells neither that it waits nor that it thinks: its small pet plays, whatever it does.

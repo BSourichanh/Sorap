@@ -22,6 +22,7 @@ Paros suit les sessions Claude Code interactives de la machine, pour l'utilisate
 | N'a pas pu écrire un fichier qu'une autre session venait de modifier | Les deux personnages se tournent l'un vers l'autre et se toisent. Bulle avec le fichier et l'autre session, deux notes descendantes. Pendant 10 minutes ils se toisent encore quand ils se croisent |
 | Au repos | Se promène, s'assoit, dort |
 | Contexte rempli à 75 % ou plus | La tête fume |
+| A compacté son contexte | Quelques secondes, après coup : voir [Compactage](#compactage) |
 | Fermée | Le personnage disparaît |
 
 ### Avec les hooks
@@ -36,6 +37,7 @@ Paros suit les sessions Claude Code interactives de la machine, pour l'utilisate
 | Outil lancé par un sous-agent | Légende courte au-dessus de son petit personnage : « Read · pet.gd ». Une ligne, coupée si elle est longue. La légende du grand personnage ne change pas |
 | Outil échoué dans un sous-agent | Son petit personnage tremble. Pas de son |
 | Sous-agent fini | Son petit personnage saute, cœurs, puis court rejoindre le grand et disparaît |
+| Compactage commencé | Assis près d'une corbeille, sort des feuilles de sa tête et les y jette. Voir [Compactage](#compactage) |
 | Advisor consulté | Le sage vient : un personnage plus grand, chapeau pointu, barbe blanche et bâton. Voir [Advisor](#advisor) |
 | Tests réussis | Saut, bulle « Tests verts ! » |
 | Tests échoués | Tremble, bulle « Tests rouges », deux notes descendantes |
@@ -135,13 +137,26 @@ Sans ce programme (Windows, terminal non reconnu, onglet en arrière-plan, texte
 
 Deux réglages : « Le sage vient quand l'advisor est consulté », et « Lire les terminaux pour voir l'advisor au travail ».
 
+## Compactage
+
+Quand le contexte d'une session est plein, Claude Code le compacte : il résume la conversation et repart de ce résumé. L'utilisateur peut aussi le demander avec `/compact`. Cela prend de quelques secondes à deux minutes.
+
+1. Le personnage s'assoit, une corbeille grillagée posée par terre devant lui. La bulle dit « Compactage du contexte », ou « Contexte plein : compactage » quand Claude Code l'a lancé de lui-même.
+2. Il sort une feuille du haut de sa tête, la froisse en boule et la jette dans la corbeille. Puis la suivante. Les boules s'entassent dans la corbeille.
+3. Quand le contexte était plein, une goutte de sueur coule derrière sa tête.
+4. À la fin, la corbeille s'en va. Le personnage se lève, secoue la tête, des étincelles jaillissent : « Contexte compacté ». La fumée s'arrête : le contexte est presque vide jusqu'à ce que la réponse suivante donne sa taille.
+
+La fiche au survol indique « Compacte le contexte depuis », avec la durée. Un personnage qui compacte ne rejoint pas la tour, et la fin d'un compactage n'est pas la fin d'une tâche : pas de « Tâche finie ! ».
+
+Le hook `PreCompact` donne le début, le hook `PostCompact` et le transcript donnent la fin. Sans les hooks, seul le transcript le dit, une fois fini : la scène se joue alors après coup, pendant 6 secondes. Un compactage qui échoue ne donne pas de fin : l'outil suivant, ou le prompt suivant, termine la scène.
+
 ## D'où viennent les informations
 
 | Source | Donne | Remarque |
 |---|---|---|
 | `~/.claude/sessions/<pid>.json` | Sessions ouvertes, nom, dossier, statut (`busy`, `waiting`, `idle`, `shell`) | Format interne à Claude Code, non documenté : une mise à jour peut le changer |
-| Transcript de la session, dans `~/.claude/projects/` | Couleur (`/color`), dernier prompt, résumé, tokens de contexte, tâches en arrière-plan, messages entre sessions, fichiers écrits, appels à l'advisor | Seules les lignes ajoutées depuis la dernière lecture sont lues |
-| `$XDG_RUNTIME_DIR/paros/claude-events.log` | Outils, sous-agents, échecs, fin de tour, demandes de permission | Écrit par `hooks/claude-hook.sh` |
+| Transcript de la session, dans `~/.claude/projects/` | Couleur (`/color`), dernier prompt, résumé, tokens de contexte, tâches en arrière-plan, messages entre sessions, fichiers écrits, appels à l'advisor, fin d'un compactage | Seules les lignes ajoutées depuis la dernière lecture sont lues |
+| `$XDG_RUNTIME_DIR/paros/claude-events.log` | Outils, sous-agents, échecs, fin de tour, demandes de permission, compactages | Écrit par `hooks/claude-hook.sh` |
 | Dossier de la session | État git | Par la commande `git` |
 
 Si `CLAUDE_CONFIG_DIR` est défini, il remplace `~/.claude`.
@@ -154,7 +169,7 @@ Les tokens de contexte sont la somme des tokens d'entrée de la dernière répon
 
 ## Installer les hooks
 
-Dans `~/.claude/settings.json`, déclarer le script pour chacun de ces événements : `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `SubagentStart`, `SubagentStop`, `Stop`.
+Dans `~/.claude/settings.json`, déclarer le script pour chacun de ces événements : `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `SubagentStart`, `SubagentStop`, `Stop`, `PreCompact`, `PostCompact`.
 
 ```json
 {
@@ -171,7 +186,7 @@ Dans `~/.claude/settings.json`, déclarer le script pour chacun de ces événeme
 
 Sous Windows, écrire la commande `sh "C:/chemin/vers/Paros/hooks/claude-hook.sh"` (barres obliques, lancée par Git Bash).
 
-Le même bloc est à répéter pour les six autres événements. Les hooks de `~/.claude/settings.json` valent pour toutes les sessions de l'utilisateur, quel que soit le projet. Une session déjà ouverte les prend en compte sans redémarrage.
+Le même bloc est à répéter pour les huit autres événements. Les hooks de `~/.claude/settings.json` valent pour toutes les sessions de l'utilisateur, quel que soit le projet. Une session déjà ouverte les prend en compte sans redémarrage.
 
 Le script ne peut pas perturber une session : il est lancé en arrière-plan (`async`), n'affiche rien et sort toujours avec 0.
 
@@ -186,7 +201,7 @@ Une ligne par événement, sept champs séparés par des tabulations :
 | Type de notification | `permission_prompt` |
 | Outil | `Edit` |
 | Détail, 120 caractères au plus | Nom du fichier touché, sinon description de la commande, sinon message de la notification |
-| Genre | `test` quand la commande lance des tests, vide sinon |
+| Genre | `test` quand la commande lance des tests. Pour un compactage, ce qui l'a lancé : `auto` (contexte plein) ou `manual` (`/compact`). Vide sinon |
 | Agent | Identifiant du sous-agent d'où vient l'événement, vide pour la session |
 
 ## Confidentialité
@@ -204,7 +219,7 @@ Sous Linux, avec le réglage « Lire les terminaux pour voir l'advisor au travai
 - Un serveur lancé par une commande que la liste ne connaît pas compte comme une tâche : le personnage attend près du sablier.
 - Une collision n'est vue que si l'autre session a écrit le fichier avec `Edit` ou `Write`. Un fichier modifié par une commande (`sed`, un script, un formateur) n'a pas d'auteur connu : rien n'est montré.
 - Une tâche en arrière-plan sans avis de fin au bout de 30 minutes est oubliée, sauf si le registre dit qu'une commande tourne encore : le personnage retourne au repos.
-- `Stop` se déclenche aussi sur `/clear` et sur un compactage : le personnage saute alors sans qu'une tâche soit finie.
+- `Stop` se déclenche aussi sur `/clear` : le personnage saute alors sans qu'une tâche soit finie. Celui envoyé autour d'un compactage est ignoré.
 - Les sous-agents sont suivis par les événements `SubagentStart` et `SubagentStop`, par identifiant : un `SubagentStop` sans `SubagentStart` connu est ignoré, Claude Code en envoie à chaque fin de tour. Un `SubagentStop` manqué laisse un petit personnage jusqu'à la fermeture de la session.
 - Le nom d'un sous-agent est la description de l'outil `Agent` lancé juste avant lui. Deux sous-agents lancés en même temps peuvent échanger leurs noms. Un sous-agent à qui la session redonne du travail repart sous le même nom.
 - Un sous-agent ne dit ni qu'il attend ni qu'il réfléchit : son petit personnage joue, quoi qu'il fasse.

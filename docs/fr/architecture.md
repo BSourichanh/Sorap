@@ -89,15 +89,15 @@ Les demandes vont dans l'autre sens, un fichier par demande dans `requests/` : `
 
 ### Souhait et état
 
-Le cerveau donne un **souhait** (`Pet.Wish`) : `ROAM`, `SLEEP`, `THINK`, `ALERT`, `WAIT`, `READ`. C'est un ordre permanent. Le personnage y obéit dès qu'il est au repos : un saut de joie en cours se termine d'abord.
+Le cerveau donne un **souhait** (`Pet.Wish`) : `ROAM`, `SLEEP`, `THINK`, `ALERT`, `WAIT`, `READ`, `COMPACT`. C'est un ordre permanent. Le personnage y obéit dès qu'il est au repos : un saut de joie en cours se termine d'abord.
 
 L'**état** (`Pet.State`) est ce que le personnage fait à l'instant :
 
 | État | Fin |
 |---|---|
 | `IDLE`, `SIT`, `WALK` | Durée tirée au hasard, ou changement de souhait |
-| `SLEEP`, `THINK`, `ALERT`, `WAIT` | Quand le souhait change. `SLEEP` passe par `STRETCH` |
-| `STRETCH`, `CHEER`, `GREET`, `GLARE`, `HIGH_FIVE`, `WORRY`, `ROAST`, `KNOCK`, `SWEEP`, `THROW`, `READ`, `NOD` | Durée fixe, dans `Pet.TIMED`. `READ` dure tant que le souhait est `READ` |
+| `SLEEP`, `THINK`, `ALERT`, `WAIT`, `COMPACT` | Quand le souhait change. `SLEEP` passe par `STRETCH` |
+| `STRETCH`, `CHEER`, `GREET`, `GLARE`, `HIGH_FIVE`, `WORRY`, `ROAST`, `KNOCK`, `SWEEP`, `THROW`, `READ`, `NOD`, `SHAKE` | Durée fixe, dans `Pet.TIMED`. `READ` dure tant que le souhait est `READ` |
 | `CLIMB` | Arrivée sur le perchoir |
 | `CARRIED` | Quand la souris lâche |
 | `FALL` | Atterrissage |
@@ -129,6 +129,7 @@ Tous portent `session`, l'identifiant de la session.
 | `session_subagents` | `count`, `agents` (`id`, `name`, `tool` et `detail` de chacun) | Un petit personnage par sous-agent, avec sa légende |
 | `session_background` | `background`, `servers` | Sablier tant que le tour est fini et qu'une tâche en arrière-plan tourne. Pas de « Tâche finie ! ». Yeux verts tant qu'un serveur tourne |
 | `session_advisor` | `asking` | Le sage vient, lit une lettre, répond et sort de l'écran |
+| `session_compacting` | `compacting`, `auto` | Le personnage s'assoit près d'une corbeille et jette des feuilles de sa tête, puis secoue la tête. Transpire quand le contexte était plein |
 | `session_message_sent` | `to`, le nom d'une session | Le personnage lance une lettre au personnage de cette session. Son tour fini, il attend la réponse tant que cette session travaille |
 | `session_mail` | `mail` | Boîte aux lettres tant que des messages d'autres sessions attendent d'être lus. Lecture de la lettre quand l'une sort |
 | `session_collision` | `other`, `file`, `path` | Les deux personnages se toisent, bulle, son. Rivaux pendant 10 minutes |

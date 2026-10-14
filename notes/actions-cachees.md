@@ -52,7 +52,7 @@ Le sens d'une ligne est déduit de son contenu. Quand il n'est pas établi, c'es
 | Ligne | Ce qu'elle dit | Paros |
 |---|---|---|
 | `assistant`, champ `usage` | Tokens d'entrée de la réponse | **lu** : tête qui fume |
-| `system` `compact_boundary` (16) | Compaction : tokens avant et après, déclencheur, durée | **piste** : le personnage se vide la tête. Évite aussi le faux « Tâche finie ! » noté dans les limites |
+| `system` `compact_boundary` (16) | Compaction : tokens avant et après, déclencheur, durée | **fait** : le personnage jette des feuilles de sa tête dans une corbeille. Le hook `PreCompact` donne le début, cette ligne ou `PostCompact` la fin. Plus de faux « Tâche finie ! » |
 | `attachment` `compact_file_reference` (25) | Fichier rappelé après une compaction | — |
 | `attachment` `total_tokens_reminder` (7 520) | Tokens restants dans le budget de la session | **piste** : jauge, si le budget est petit |
 | `attachment` `thinking_stripped` (14) | La réflexion a été retirée du contexte | — |
