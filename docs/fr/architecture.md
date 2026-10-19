@@ -143,7 +143,7 @@ Tous portent `session`, l'identifiant de la session.
 
 ### Sessions agy — `agy_sense.gd`
 
-Les mêmes événements que les sessions Claude Code, avec l'id de la conversation agy comme `session`. `session_opened` et `session_changed` portent aussi `kind` : `agy`. Pas de `session_needs_you`, `session_subagents`, `session_advisor`, `session_compacting` ni `session_collision` : agy n'en écrit rien que Paros puisse lire. `session_message_sent` porte l'adresse du pont d'agents (Diaulos), comme `claude:paros-35` : le cerveau trouve le personnage de cette adresse. Voir [agy](agy.md).
+Les mêmes événements que les sessions Claude Code, avec l'id de la conversation agy comme `session`. `session_opened` et `session_changed` portent aussi `kind` : `agy`. `session_needs_you` vient d'une question à l'utilisateur (`ask_question`), `session_subagents` des sous-agents (`invoke_subagent`), `session_compacting` de la troncature de la conversation, les deux ensemble, après coup. Pas de `session_advisor` ni de `session_collision` : agy n'en écrit rien que Paros puisse lire. `session_message_sent` porte l'adresse du pont d'agents (Diaulos), comme `claude:paros-35` : le cerveau trouve le personnage de cette adresse. Voir [agy](agy.md).
 
 ### Git — `git_sense.gd`
 

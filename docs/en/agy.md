@@ -4,7 +4,7 @@
 
 Paros also follows the sessions of agy, the Antigravity CLI of Google, for the current user. Each one gets its own pet, drawn after the agy mascot: an "A" in a gradient from orange to green and blue. It lives with the Claude Code pets: it walks, sits, sleeps, greets them, and they write letters to each other through [Diaulos](https://github.com/Dr1mS/Diaulos).
 
-![A Claude pet throws a letter, an agy pet reads one, another thinks with "run_command · Run tests" above its head, a last one cheers](../images/agy.png)
+![A Claude pet throws a letter, an agy pet reads one, another thinks with the small pets of its two subagents, a last one waves at a question](../images/agy.png)
 
 Linux only. Nothing to install: Paros reads the files agy writes. An optional hook tells the end of a cancelled turn.
 
@@ -12,15 +12,18 @@ Linux only. Nothing to install: Paros reads the files agy writes. An optional ho
 
 | Session | Pet |
 |---|---|
-| Open | A pet appears, named after the title of the conversation (`/rename`, else the one agy gives it), else after its folder. Its name tag is blue: agy has no `/color` |
+| Open | A pet appears, named after the title of the conversation (`/rename`, else the one agy gives it), else after its folder: "New Conversation", the title of a new session, does not count. Its name tag is blue: agy has no `/color` |
 | Working | Stays in place, looks up, three dots fill up above its head |
-| Tool started | Caption above the head: "view_file · README.md", "run_command · Run tests" |
-| Waits for a command it started in the background | Sits and watches an hourglass |
+| Tool started | Caption above the head: "view_file · README.md", "run_command · Run tests", "search_web · godot read_link" |
+| Asks you a question (`ask_question`) | Waves its arms in turn, bubble with the question, until you answer |
+| Waits for a command or a timer (`schedule`) it started in the background | Sits and watches an hourglass. A task stopped with `manage_task` ends the wait |
+| Started subagents (`invoke_subagent`) | A small "A" per subagent, named after its role, with the tool it uses. It stays while its subagent works or waits for its own background task, then runs back |
 | Left a server running in the background | Its eyes glow green |
 | End of a turn you asked for | Jump, hearts, bubble "Task done!" |
 | End of a turn another session asked for | Nods twice |
 | Tests passed | Jump, bubble "Green tests!" |
-| Tests failed, other failed command | Shakes, two falling notes |
+| Tests failed, other failed command, tool in error | Shakes, two falling notes. In a subagent: its small pet shakes, no sound |
+| Truncated the start of the conversation | Sits by a bin and throws away sheets of its head, after the fact |
 | No new step for 8 seconds, then 25 | Taps its foot, then meditates |
 | Writes to another session through Diaulos | Throws a letter, which flies to the pet of that session |
 | A message of Diaulos waits in its inbox | A mailbox stands beside the pet. It reads the letter when the session takes it |
@@ -29,7 +32,7 @@ Linux only. Nothing to install: Paros reads the files agy writes. An optional ho
 
 Its arms show only while they rise: when it cheers, waves, throws or reads. At rest the "A" keeps the shape of the mascot.
 
-It wears no accessory: nothing sits well on the point of the "A". During a merge or a rebase, the warning sign stands beside it, without the hard hat. The git branch, the folders carried and the other reactions to the repository work as for a Claude Code session: see [Claude Code](claude-code.md).
+It wears no accessory: nothing sits well on the point of the "A". Its back arm shows to carry the folders of uncommitted changes. During a merge or a rebase, the warning sign stands beside it, without the hard hat. The git branch, the folders carried and the other reactions to the repository work as for a Claude Code session: see [Claude Code](claude-code.md).
 
 ## Diaulos
 
@@ -48,7 +51,7 @@ Nothing to set up: Paros reads the commands of the sessions and the inboxes of D
 |---|---|
 | `/proc/<pid>/fd` of each `agy` process | The process holds `~/.gemini/antigravity-cli/presence/<conversation id>.lock` open: the conversation it runs. Its folder is the one of the process |
 | `~/.gemini/antigravity-cli/annotations/<conversation id>.pbtxt` | The title of the conversation |
-| `~/.gemini/antigravity-cli/brain/<conversation id>/.system_generated/logs/transcript_full.jsonl` | One line per step: the request, each answer of the model with its tool calls, their results, the end of the tasks started in the background, the tokens used |
+| `~/.gemini/antigravity-cli/brain/<conversation id>/.system_generated/logs/transcript_full.jsonl` | One line per step: the request, each answer of the model with its tool calls, their results, the end of the tasks started in the background, the reports of the subagents, the truncation of the context (`CHECKPOINT`), the tokens used. Each subagent has its own, in `brain/<its conversation id>/` |
 | `~/.agent-bridge/inbox/agy-<conversation id>/` | The messages of Diaulos that wait |
 | `$XDG_RUNTIME_DIR/paros/agy-events.log` | Written by the hook, see below |
 
@@ -78,8 +81,8 @@ The script writes one line per event, three fields separated by tabs: the event,
 
 - Linux only: the conversation of a process is read in `/proc`. On Windows, agy sessions get no pet.
 - The agy CLI only. Antigravity Desktop and the IDE are other programs: their sessions are not seen.
-- agy writes no wait for a permission in a file Paros can read: the pet never waves its arms. With `toolPermission` set to `always-proceed`, agy never asks.
-- A command counts as failed when its result reads "The command exited with code" followed by anything but 0. A failed edit or read shows nothing.
+- agy writes no wait for a permission in a file Paros can read: only a question (`ask_question`) makes the pet wave its arms. With `toolPermission` set to `always-proceed`, agy never asks for a permission.
+- A command counts as failed when its result reads "The command exited with code" followed by anything but 0. Another tool fails when its step has the status `ERROR`.
 - A turn told working with no new step for 10 minutes when Paros starts is taken as over.
 - The formats read are those of agy with language server 1.4. They are not documented and may change.
 

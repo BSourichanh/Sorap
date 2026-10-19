@@ -143,7 +143,7 @@ All carry `session`, the session id.
 
 ### agy sessions — `agy_sense.gd`
 
-The same events as the Claude Code sessions, the id of the agy conversation as `session`. `session_opened` and `session_changed` also carry `kind`: `agy`. No `session_needs_you`, `session_subagents`, `session_advisor`, `session_compacting` or `session_collision`: agy writes nothing of them that Paros can read. `session_message_sent` carries the address of the agent bridge (Diaulos), such as `claude:paros-35`: the brain finds the pet of that address. See [agy](agy.md).
+The same events as the Claude Code sessions, the id of the agy conversation as `session`. `session_opened` and `session_changed` also carry `kind`: `agy`. `session_needs_you` comes from a question to the user (`ask_question`), `session_subagents` from the subagents (`invoke_subagent`), `session_compacting` from the truncation of the conversation, both together, after the fact. No `session_advisor` or `session_collision`: agy writes nothing of them that Paros can read. `session_message_sent` carries the address of the agent bridge (Diaulos), such as `claude:paros-35`: the brain finds the pet of that address. See [agy](agy.md).
 
 ### Git — `git_sense.gd`
 

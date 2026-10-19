@@ -19,7 +19,7 @@ Godot 4.7, GDScript. Aucun fichier image ni son : tout est dessiné et synthéti
 - **Il réagit à ton travail.** Tests verts ou rouges, commandes échouées, contexte plein, modifications non commitées, fusion en cours, commit propre.
 - **Chaque sous-agent a son petit personnage.** Il reste près du grand, affiche son outil en cours, et joue comme un enfant : il saute, court vers les autres, monte des pyramides avec eux. Seize au plus par session.
 - **Il se vide la tête quand le contexte est compacté.** Assis près d'une corbeille, il sort des feuilles de sa tête, les froisse et les y jette, puis secoue la tête, plus léger.
-- **Les sessions agy ont aussi leur personnage.** Il est dessiné d'après la mascotte d'agy, un « A » en dégradé, et vit avec les personnages Claude. Il réfléchit, montre son outil, attend ses commandes en arrière-plan, saute de joie en fin de tour, et écrit des lettres par Diaulos. Voir [agy](docs/fr/agy.md).
+- **Les sessions agy ont aussi leur personnage.** Il est dessiné d'après la mascotte d'agy, un « A » en dégradé, et vit avec les personnages Claude. Il réfléchit, montre son outil, fait signe quand agy te pose une question, a des petits personnages pour ses sous-agents, attend ses commandes en arrière-plan, saute de joie en fin de tour, et écrit des lettres par Diaulos. Voir [agy](docs/fr/agy.md).
 - **Le sage vient quand la session consulte l'advisor.** Chapeau pointu, barbe blanche et bâton : il lit la lettre que le personnage lui lance, répond, puis sort de l'écran.
 - **Il vit sur le bureau.** Il traverse les écrans, s'assoit, dort la nuit, salue les autres personnages, se laisse lancer, grimpe sur la fenêtre active.
 - **Il ne gêne pas.** Un clic à côté de lui le traverse. Il quitte l'écran d'une application en plein écran.
@@ -36,7 +36,7 @@ Godot 4.7, GDScript. Aucun fichier image ni son : tout est dessiné et synthéti
 
 | Sessions agy, à côté de Claude Code |
 |---|
-| ![Un personnage Claude lance une lettre, un personnage agy en lit une, un autre réfléchit avec « run_command · Run tests » au-dessus de la tête, un dernier saute de joie](docs/images/agy.png) |
+| ![Un personnage Claude lance une lettre, un personnage agy en lit une, un autre réfléchit avec les petits personnages de ses deux sous-agents, un dernier fait signe pour une question](docs/images/agy.png) |
 
 L'interface (bulles, menu, réglages) est en français ou en anglais. Elle suit la langue du système, et se règle dans les réglages.
 
@@ -108,7 +108,7 @@ Pour lancer sans Godot, construire un binaire autonome avec `./build.sh` (voir [
 ./test.sh
 ```
 
-133 tests unitaires, sans affichage, en quelques secondes.
+134 tests unitaires, sans affichage, en quelques secondes.
 
 ## Licence
 

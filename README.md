@@ -19,7 +19,7 @@ Built with Godot 4.7 and GDScript. No image file and no sound file: everything i
 - **It reacts to your work.** Green or red tests, failed commands, a full context window, uncommitted changes, a merge in progress, a clean commit.
 - **Each subagent has its small pet.** It stays near the big one, shows the tool it uses, and plays like a child: it jumps, runs to the others, builds pyramids with them. Sixteen at most per session.
 - **It empties its head when the context is compacted.** It sits by a bin, pulls sheets out of its head, crumples them and throws them in, then shakes its head, lighter.
-- **agy sessions have their pet too.** It is drawn after the agy mascot, an "A" in a gradient, and lives with the Claude pets. It thinks, shows its tool, waits for its background commands, cheers at the end of a turn, and writes letters through Diaulos. See [agy](docs/en/agy.md).
+- **agy sessions have their pet too.** It is drawn after the agy mascot, an "A" in a gradient, and lives with the Claude pets. It thinks, shows its tool, waves when agy asks you a question, has small pets for its subagents, waits for its background commands, cheers at the end of a turn, and writes letters through Diaulos. See [agy](docs/en/agy.md).
 - **The sage comes when the session asks the advisor.** Pointy hat, white beard and staff: it reads the letter the pet throws to it, answers, then walks off the screen.
 - **It lives on your desktop.** It walks across your screens, sits, sleeps at night, greets the other pets, can be thrown around, and climbs onto the focused window.
 - **It stays out of the way.** Clicks next to it go through. It leaves a screen that runs a full screen app.
@@ -36,7 +36,7 @@ Built with Godot 4.7 and GDScript. No image file and no sound file: everything i
 
 | agy sessions, beside Claude Code |
 |---|
-| ![A Claude pet throws a letter, an agy pet reads one, another thinks with "run_command · Run tests" above its head, a last one cheers](docs/images/agy.png) |
+| ![A Claude pet throws a letter, an agy pet reads one, another thinks with the small pets of its two subagents, a last one waves at a question](docs/images/agy.png) |
 
 The interface (bubbles, menu, settings) is in English or in French. It follows the language of the system, and can be set in the settings.
 
@@ -108,7 +108,7 @@ To run without Godot, build a standalone binary with `./build.sh` (see [Developm
 ./test.sh
 ```
 
-133 unit tests, run without a display in a few seconds.
+134 unit tests, run without a display in a few seconds.
 
 ## License
 
