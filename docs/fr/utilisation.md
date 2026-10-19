@@ -6,7 +6,7 @@ L'interface est en français ou en anglais. Elle suit la langue du système, et 
 
 ## Les personnages
 
-Chaque session Claude Code interactive ouverte sur la machine a son personnage. Il apparaît à l'ouverture de la session et disparaît à sa fermeture, sans relancer Paros. Sans aucune session, un seul personnage orange, sans nom, se promène.
+Chaque session Claude Code interactive ouverte sur la machine a son personnage, de même que chaque session agy, sous Linux (voir [agy](agy.md)). Il apparaît à l'ouverture de la session et disparaît à sa fermeture, sans relancer Paros. Sans aucune session, un seul personnage orange, sans nom, se promène.
 
 | Ce qui distingue un personnage | D'où ça vient |
 |---|---|

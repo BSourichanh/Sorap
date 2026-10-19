@@ -6,7 +6,7 @@ The interface is in English or in French. It follows the language of the system,
 
 ## The pets
 
-Each interactive Claude Code session open on the machine has its pet. It appears when the session opens and goes when it closes, without restarting Paros. With no session, a single orange pet with no name walks around.
+Each interactive Claude Code session open on the machine has its pet, and so does each agy session, on Linux (see [agy](agy.md)). It appears when the session opens and goes when it closes, without restarting Paros. With no session, a single orange pet with no name walks around.
 
 | What tells a pet apart | Where it comes from |
 |---|---|

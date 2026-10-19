@@ -41,8 +41,8 @@ Les réglages, le fichier de lancement au démarrage et le dossier d'exécution 
 |---|---|
 | `test_pet.gd` | Machine à états d'un personnage : souhaits, états courts, vol et rebonds, parapluie, courses, perchoir, mode discret, saut, zone, petite taille, sortie de l'écran, lecture continue |
 | `test_pets.gd` | Rencontres, rivalité, tape dans la main, lettres, fréquence d'images, petits personnages à part et qui s'écartent |
-| `test_brain.gd` | Règles : une session par personnage, souhaits, sommeil, verrouillage, git, contexte, toc-toc, tour, fiche, petits personnages des sous-agents et leur pyramide, sage |
-| `test_senses.gd` | Lecture du registre et des transcripts Claude Code, journal des hooks, sorties de git, fichier du bureau, script de hook, appels à l'advisor et lecture du terminal |
+| `test_brain.gd` | Règles : une session par personnage, souhaits, sommeil, verrouillage, git, contexte, toc-toc, tour, fiche, petits personnages des sous-agents et leur pyramide, sage, personnages agy et adresses de Diaulos |
+| `test_senses.gd` | Lecture du registre et des transcripts Claude Code, journal des hooks, sorties de git, fichier du bureau, scripts de hook, appels à l'advisor et lecture du terminal, processus et transcripts agy |
 | `test_core.gd` | Réglages, minuteur de focus, synthèse des sons et fichier WAV, bulle, lancement au démarrage |
 
 ### Écrire un test
@@ -142,7 +142,7 @@ Ce qui est propre à Linux est isolé : lecture de `/proc` et `/sys`, `gdbus`, d
 
 ## Limites connues
 
-- **Formats non documentés** : `~/.claude/sessions/*.json` et les transcripts. Une mise à jour de Claude Code peut casser le suivi des sessions.
+- **Formats non documentés** : `~/.claude/sessions/*.json` et les transcripts. Une mise à jour de Claude Code peut casser le suivi des sessions. De même pour les fichiers d'agy dans `~/.gemini/antigravity-cli/`.
 - **Extension GNOME** : à revérifier à chaque version de GNOME. Toute modification demande une reconnexion.
 - **Moniteurs sous verrouillage** : Paros les rallume chaque seconde, faute de pouvoir empêcher GNOME de les éteindre. Ils peuvent clignoter une fois.
 - **Onglets de terminal** : la bonne fenêtre n'est pas toujours trouvée quand la session est dans un onglet en arrière-plan.

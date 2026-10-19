@@ -33,6 +33,7 @@ Adding a feature nearly always comes down to: a sense that posts an event, a rul
 | `autostart.gd` | Start at login. Class `Autostart` |
 | **`src/senses/`** | |
 | `claude_code_sense.gd` | Claude Code sessions: registry, transcripts, hook log |
+| `agy_sense.gd` | agy sessions: processes, titles, transcripts, inboxes of Diaulos, hook log |
 | `git_sense.gd` | Git status of the folder of each session |
 | `desktop_sense.gd` | File written by the GNOME extension, or by the Windows helper: focused window, pointer, lock, full screen |
 | `system_sense.gd` | Temperature, load, battery |
@@ -55,6 +56,7 @@ Adding a feature nearly always comes down to: a sense that posts an event, a rul
 | `settings_window.gd` | Settings window |
 | **Outside `src/`** | |
 | `hooks/claude-hook.sh` | Script called by the Claude Code hooks |
+| `hooks/agy-hook.sh` | Script called by the `Stop` hook of agy |
 | `gnome-extension/` | GNOME Shell extension and its installer |
 | `linux/` | `paros-terminal.py`: reads the terminals to see a session ask the advisor |
 | `tests/` | Unit tests |
@@ -104,7 +106,7 @@ The **state** (`Pet.State`) is what the pet does right now:
 
 ### Attributes
 
-The brain also sets attributes that the body draws on top of the state: `label`, `color`, `accessory`, `caption`, `sheet`, `sage`, `urgent`, `fullness`, `baggage`, `hard_hat`, `lost`, `tapping`, `meditating`, `headlamp`, `cool`, `grooving`, `mail`, `serving`, `discreet`, `rooted`, `pace`, `dispute`, `perch`, `avoid`, `stature`, `home_x`, `home_reach`, `exit_side`.
+The brain also sets attributes that the body draws on top of the state: `kind` (`claude` or `agy`: the mascot drawn), `label`, `color`, `accessory`, `caption`, `sheet`, `sage`, `urgent`, `fullness`, `baggage`, `hard_hat`, `lost`, `tapping`, `meditating`, `headlamp`, `cool`, `grooving`, `mail`, `serving`, `discreet`, `rooted`, `pace`, `dispute`, `perch`, `avoid`, `stature`, `home_x`, `home_reach`, `exit_side`.
 
 ### Floor
 
@@ -138,6 +140,10 @@ All carry `session`, the session id.
 | `session_finished` | | Jump, bubble, sound |
 | `session_tests_passed` | | Jump, bubble, sound |
 | `session_tool_failed` | `tool`, `detail`, `kind`, `agent` | Shake, sound. In a subagent: its small pet shakes, no sound |
+
+### agy sessions — `agy_sense.gd`
+
+The same events as the Claude Code sessions, the id of the agy conversation as `session`. `session_opened` and `session_changed` also carry `kind`: `agy`. No `session_needs_you`, `session_subagents`, `session_advisor`, `session_compacting` or `session_collision`: agy writes nothing of them that Paros can read. `session_message_sent` carries the address of the agent bridge (Diaulos), such as `claude:paros-35`: the brain finds the pet of that address. See [agy](agy.md).
 
 ### Git — `git_sense.gd`
 

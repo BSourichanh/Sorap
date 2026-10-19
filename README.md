@@ -2,13 +2,15 @@
 
 **English** · [Français](README.fr.md)
 
-A desktop companion for Claude Code. A small pixel pet lives at the bottom of your screen, one per open Claude Code session. One look tells you what each session is doing: working, waiting for you, or done.
+A desktop companion for Claude Code and agy (Google Antigravity CLI). A small pixel pet lives at the bottom of your screen, one per open session. One look tells you what each session is doing: working, waiting for you, or done.
+
+Compatible with [Diaulos](https://github.com/Dr1mS/Diaulos), the bridge between agy and Claude Code sessions: the messages they send each other fly from pet to pet as letters.
 
 ![Five pets, one per session: thinking, waiting, cheering, merging, sleeping](docs/images/hero.en.png)
 
 Built with Godot 4.7 and GDScript. No image file and no sound file: everything is drawn and synthesized by code.
 
-> Paros is an unofficial fan project. It is not affiliated with or endorsed by Anthropic.
+> Paros is an unofficial fan project. It is not affiliated with or endorsed by Anthropic or Google.
 
 ## What it does
 
@@ -17,6 +19,7 @@ Built with Godot 4.7 and GDScript. No image file and no sound file: everything i
 - **It reacts to your work.** Green or red tests, failed commands, a full context window, uncommitted changes, a merge in progress, a clean commit.
 - **Each subagent has its small pet.** It stays near the big one, shows the tool it uses, and plays like a child: it jumps, runs to the others, builds pyramids with them. Sixteen at most per session.
 - **It empties its head when the context is compacted.** It sits by a bin, pulls sheets out of its head, crumples them and throws them in, then shakes its head, lighter.
+- **agy sessions have their pet too.** It is drawn after the agy mascot, an "A" in a gradient, and lives with the Claude pets. It thinks, shows its tool, waits for its background commands, cheers at the end of a turn, and writes letters through Diaulos. See [agy](docs/en/agy.md).
 - **The sage comes when the session asks the advisor.** Pointy hat, white beard and staff: it reads the letter the pet throws to it, answers, then walks off the screen.
 - **It lives on your desktop.** It walks across your screens, sits, sleeps at night, greets the other pets, can be thrown around, and climbs onto the focused window.
 - **It stays out of the way.** Clicks next to it go through. It leaves a screen that runs a full screen app.
@@ -30,6 +33,10 @@ Built with Godot 4.7 and GDScript. No image file and no sound file: everything i
 | Subagents | Advisor |
 |---|---|
 | ![A big pet with small ones around: one walks, one jumps, three build a pyramid](docs/images/subagents.png) | ![A pet beside the sage, who reads a letter](docs/images/sage.png) |
+
+| agy sessions, beside Claude Code |
+|---|
+| ![A Claude pet throws a letter, an agy pet reads one, another thinks with "run_command · Run tests" above its head, a last one cheers](docs/images/agy.png) |
 
 The interface (bubbles, menu, settings) is in English or in French. It follows the language of the system, and can be set in the settings.
 
@@ -58,6 +65,8 @@ Three optional steps complete the setup:
 
 Without them, the pets still follow the sessions, their name, their color and their state.
 
+agy sessions need nothing more: Paros finds them on its own, on Linux. An optional hook tells the end of a cancelled turn: see [agy](docs/en/agy.md#the-hook).
+
 On Linux, to see the sage while the advisor works, `python3-gi` is needed (present with GNOME): Paros then reads the visible text of the terminals. See [Advisor](docs/en/claude-code.md#advisor) and [Privacy](docs/en/claude-code.md#privacy).
 
 To run without Godot, build a standalone binary with `./build.sh` (see [Development](docs/en/development.md#exporting-a-binary)).
@@ -79,6 +88,7 @@ To run without Godot, build a standalone binary with `./build.sh` (see [Developm
 |---|---|
 | [Usage](docs/en/usage.md) | Every behavior, gesture, menu entry and setting |
 | [Claude Code](docs/en/claude-code.md) | What Paros reads from the sessions, subagents, advisor, hook setup, privacy |
+| [agy](docs/en/agy.md) | agy sessions, letters through Diaulos, the optional hook, limits |
 | [GNOME extension](docs/en/gnome-extension.md) | Terminal focus, perch, lock screen, full screen |
 | [Architecture](docs/en/architecture.md) | Code layout, event reference, how to add a sense or a behavior |
 | [Development](docs/en/development.md) | Tests, binary export, performance, known limits, troubleshooting |
@@ -89,6 +99,7 @@ To run without Godot, build a standalone binary with `./build.sh` (see [Developm
 |---|---|
 | Linux, GNOME, Wayland | Tested |
 | Linux, other desktops | The core works. GNOME-only parts stay silent |
+| agy | Linux only, the agy CLI. Tested with agy (language server 1.4) |
 | Windows | Tested from the sources (Godot 4.7, Git Bash for the hooks, `./test.ps1` for the tests). A PowerShell helper (`windows/`) replaces the GNOME extension: terminal focus, perch, full screen, inactivity, music, battery. No pets on the lock screen, no temperature alert. The sage comes once the answer of the advisor is there, not during the call |
 
 ## Tests
@@ -97,8 +108,8 @@ To run without Godot, build a standalone binary with `./build.sh` (see [Developm
 ./test.sh
 ```
 
-127 unit tests, run without a display in a few seconds.
+133 unit tests, run without a display in a few seconds.
 
 ## License
 
-[MIT](LICENSE). The license covers the code of this repository. The character drawn by Paros is modeled on the Claude Code mascot, which belongs to Anthropic.
+[MIT](LICENSE). The license covers the code of this repository. The characters drawn by Paros are modeled on the Claude Code mascot, which belongs to Anthropic, and on the agy mascot, which belongs to Google.

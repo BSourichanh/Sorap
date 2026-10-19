@@ -33,6 +33,7 @@ Ajouter une fonctionnalité revient presque toujours à : un sens qui poste un �
 | `autostart.gd` | Lancement à l'ouverture de session. Classe `Autostart` |
 | **`src/senses/`** | |
 | `claude_code_sense.gd` | Sessions Claude Code : registre, transcripts, journal des hooks |
+| `agy_sense.gd` | Sessions agy : processus, titres, transcripts, boîtes de Diaulos, journal du hook |
 | `git_sense.gd` | État git du dossier de chaque session |
 | `desktop_sense.gd` | Fichier écrit par l'extension GNOME, ou par le script Windows : fenêtre active, curseur, verrouillage, plein écran |
 | `system_sense.gd` | Température, charge, batterie |
@@ -55,6 +56,7 @@ Ajouter une fonctionnalité revient presque toujours à : un sens qui poste un �
 | `settings_window.gd` | Fenêtre de réglages |
 | **Hors `src/`** | |
 | `hooks/claude-hook.sh` | Script appelé par les hooks Claude Code |
+| `hooks/agy-hook.sh` | Script appelé par le hook `Stop` d'agy |
 | `gnome-extension/` | Extension GNOME Shell et son installateur |
 | `linux/` | `paros-terminal.py` : lit les terminaux pour voir une session consulter l'advisor |
 | `tests/` | Tests unitaires |
@@ -104,7 +106,7 @@ L'**état** (`Pet.State`) est ce que le personnage fait à l'instant :
 
 ### Attributs
 
-Le cerveau règle aussi des attributs que le corps dessine par-dessus l'état : `label`, `color`, `accessory`, `caption`, `sheet`, `sage`, `urgent`, `fullness`, `baggage`, `hard_hat`, `lost`, `tapping`, `meditating`, `headlamp`, `cool`, `grooving`, `mail`, `serving`, `discreet`, `rooted`, `pace`, `dispute`, `perch`, `avoid`, `stature`, `home_x`, `home_reach`, `exit_side`.
+Le cerveau règle aussi des attributs que le corps dessine par-dessus l'état : `kind` (`claude` ou `agy` : la mascotte dessinée), `label`, `color`, `accessory`, `caption`, `sheet`, `sage`, `urgent`, `fullness`, `baggage`, `hard_hat`, `lost`, `tapping`, `meditating`, `headlamp`, `cool`, `grooving`, `mail`, `serving`, `discreet`, `rooted`, `pace`, `dispute`, `perch`, `avoid`, `stature`, `home_x`, `home_reach`, `exit_side`.
 
 ### Sol
 
@@ -138,6 +140,10 @@ Tous portent `session`, l'identifiant de la session.
 | `session_finished` | | Saut, bulle, son |
 | `session_tests_passed` | | Saut, bulle, son |
 | `session_tool_failed` | `tool`, `detail`, `kind`, `agent` | Tremblement, son. Dans un sous-agent : son petit personnage tremble, sans son |
+
+### Sessions agy — `agy_sense.gd`
+
+Les mêmes événements que les sessions Claude Code, avec l'id de la conversation agy comme `session`. `session_opened` et `session_changed` portent aussi `kind` : `agy`. Pas de `session_needs_you`, `session_subagents`, `session_advisor`, `session_compacting` ni `session_collision` : agy n'en écrit rien que Paros puisse lire. `session_message_sent` porte l'adresse du pont d'agents (Diaulos), comme `claude:paros-35` : le cerveau trouve le personnage de cette adresse. Voir [agy](agy.md).
 
 ### Git — `git_sense.gd`
 

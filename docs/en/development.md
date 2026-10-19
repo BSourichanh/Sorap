@@ -41,8 +41,8 @@ Settings, the autostart file and the runtime folder are redirected to a temporar
 |---|---|
 | `test_pet.gd` | State machine of a pet: wishes, short states, flight and bounces, umbrella, errands, perch, discreet mode, jump, zone, small size, walking off the screen, reading on |
 | `test_pets.gd` | Meetings, rivalry, high five, letters, frame rate, small pets kept apart and making way |
-| `test_brain.gd` | Rules: one pet per session, wishes, sleep, lock screen, git, context, knock, tower, card, small pets of the subagents and their pyramid, sage |
-| `test_senses.gd` | Reading of the Claude Code registry and transcripts, hook log, git output, desktop file, hook script, calls to the advisor and reading of the terminal |
+| `test_brain.gd` | Rules: one pet per session, wishes, sleep, lock screen, git, context, knock, tower, card, small pets of the subagents and their pyramid, sage, agy pets and addresses of Diaulos |
+| `test_senses.gd` | Reading of the Claude Code registry and transcripts, hook log, git output, desktop file, hook scripts, calls to the advisor and reading of the terminal, agy processes and transcripts |
 | `test_core.gd` | Settings, focus timer, sound synthesis and WAV file, bubble, autostart |
 
 ### Writing a test
@@ -142,7 +142,7 @@ What is specific to Linux is isolated: reading `/proc` and `/sys`, `gdbus`, the 
 
 ## Known limits
 
-- **Undocumented formats**: `~/.claude/sessions/*.json` and the transcripts. A Claude Code update may break session tracking.
+- **Undocumented formats**: `~/.claude/sessions/*.json` and the transcripts. A Claude Code update may break session tracking. The same goes for the files of agy in `~/.gemini/antigravity-cli/`.
 - **GNOME extension**: to be checked again with each GNOME version. Any change needs logging out and back in.
 - **Monitors under the lock screen**: Paros switches them back on every second, for lack of a way to stop GNOME from switching them off. They may blink once.
 - **Terminal tabs**: the right window is not always found when the session is in a background tab.
