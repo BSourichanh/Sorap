@@ -853,6 +853,23 @@ func test_agy_question_subagents_kill_timer_errors_and_checkpoint() -> void:
 	]) + "\n")
 	sense._poll()
 	check_equal(last_event(&"session_subagents").get("agents"), [{"id": subagent, "name": "Sense Counter", "tool": "run_command", "detail": "List senses"}], "a small pet per subagent, with its tool")
+	var events_before := _events.size()
+	var add_sub := func(steps: Array) -> void:
+		var appended := FileAccess.open(path, FileAccess.READ_WRITE)
+		appended.seek_end()
+		for step: Dictionary in steps:
+			appended.store_string(JSON.stringify(step) + "\n")
+		appended.close()
+		sense._poll()
+	add_sub.call([
+		result_step("Tool is running as a background task with task id: %s/task-5" % subagent, "RUNNING"),
+		{"type": "PLANNER_RESPONSE", "content": "Waiting for the command."},
+	])
+	add_sub.call([
+		{"type": "SYSTEM_MESSAGE", "source": "SYSTEM", "content": "[Message] timestamp=x sender=%s/task-5 priority=HIGH content=done" % subagent},
+		call_step("run_command", {"CommandLine": "wc -l x"}),
+	])
+	check(_events.slice(events_before).all(func(event: Array) -> bool: return event[0] != &"session_subagents" or event[1].count == 1), "it stays while it waits for its background task")
 	var file := FileAccess.open(path, FileAccess.READ_WRITE)
 	file.seek_end()
 	file.store_string(JSON.stringify(result_step("The command exited with code 2.")) + "\n" + JSON.stringify({"type": "PLANNER_RESPONSE", "content": "16 files."}) + "\n")

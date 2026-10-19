@@ -98,7 +98,8 @@ var _live := {}
 ## oldest first, each {name, args}), tasks (background task id -> server),
 ## background, servers, mail, heard (time of its last sign of life), quiet,
 ## origin, asker, last_step (Unix time of the last step read), subagents
-## (conversation id -> {id, name, tool, detail, running, calls, offset, known}).
+## (conversation id -> {id, name, tool, detail, running, calls, tasks, offset,
+## known}).
 var _sessions := {}
 var _test_command := RegEx.create_from_string(
 	"(^|[ /;&|])(pytest|jest|vitest|phpunit|rspec|ctest)([ ;&|]|$)|(npm|pnpm|yarn|bun|cargo|go|dotnet|mvn|gradle|make|composer)( run)? test")
@@ -384,7 +385,7 @@ func _add_subagents(session: Dictionary, args: Dictionary, content: String) -> v
 		var agent_id := created[i].get_string(1)
 		session.subagents[agent_id] = {
 			"id": agent_id, "name": str(role.get("Role", role.get("TypeName", ""))) if role is Dictionary else "",
-			"tool": "", "detail": "", "running": false, "calls": [], "offset": 0, "known": session.known,
+			"tool": "", "detail": "", "running": false, "calls": [], "tasks": {}, "offset": 0, "known": session.known,
 		}
 
 
@@ -415,8 +416,9 @@ func _read_subagent_step(id: String, agent: Dictionary, step: Dictionary) -> voi
 	match step.get("type"):
 		"PLANNER_RESPONSE":
 			var calls: Array = step.get("tool_calls") if step.get("tool_calls") is Array else []
-			# An answer with no tool call: its work is done, until it is given more.
-			agent.running = not calls.is_empty()
+			# An answer with no tool call: its work is done, until it is given
+			# more. Unless it waits for a task it started in the background.
+			agent.running = not calls.is_empty() or not agent.tasks.is_empty()
 			agent.calls.clear()
 			for call: Variant in calls:
 				if call is Dictionary:
@@ -428,12 +430,17 @@ func _read_subagent_step(id: String, agent: Dictionary, step: Dictionary) -> voi
 		"USER_INPUT":
 			agent.running = true
 		"SYSTEM_MESSAGE":
-			if step.get("source") == "SYSTEM" and MESSAGE_MARK in str(step.get("content", "")):
+			var sender := _message_sender.search(str(step.get("content", "")))
+			if sender and step.get("source") == "SYSTEM":
+				agent.tasks.erase(sender.get_string(1))
 				agent.running = true
 		_:
 			if step.get("source") != "MODEL" or agent.calls.is_empty():
 				return
 			var call: Dictionary = agent.calls.pop_front()
+			var started := _task_started.search(str(step.get("content", "")))
+			if started and step.get("status") == "RUNNING":
+				agent.tasks[started.get_string(1)] = true
 			var code := _exit_code.search(str(step.get("content", "")))
 			var failed: bool = step.get("status") == "ERROR" or (code != null and code.get_string(1) != "0")
 			if failed and agent.known:
