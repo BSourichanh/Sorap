@@ -769,7 +769,7 @@ func test_agy_background_tasks_letters_and_cancel() -> void:
 	check_equal(last_event(&"session_message_sent").get("to"), "claude:paros-35", "wrote through the bridge")
 	check_equal(last_event(&"session_background").get("background"), 1, "a task runs in the background")
 	check_equal(last_event(&"session_phase").get("phase"), &"idle", "the turn is over, the task goes on")
-	add_steps(sense, [{"type": "SYSTEM_MESSAGE", "source": "SYSTEM", "content": 'content=Task id "%s/task-17" finished with result:' % CONVERSATION}])
+	add_steps(sense, [{"type": "SYSTEM_MESSAGE", "source": "SYSTEM", "content": '<SYSTEM_MESSAGE>\n[Message] timestamp=x sender=%s/task-17 priority=MESSAGE_PRIORITY_HIGH content=Task id "%s/task-17" finished with result:' % [CONVERSATION, CONVERSATION]}])
 	check_equal(last_event(&"session_background").get("background"), 0, "the task ended")
 	check_equal(last_event(&"session_phase").get("phase"), &"working", "the model takes the result")
 
@@ -793,3 +793,74 @@ func test_agy_hook_script_writes_one_line() -> void:
 	OS.execute("sh", ["-c", "XDG_RUNTIME_DIR='%s' '%s' Stop < '%s'" % [folder, script, folder.path_join("input.json")]], output)
 	check_equal(output[0].strip_edges(), "{}", "answers with an empty object")
 	check_equal(FileAccess.get_file_as_string(folder.path_join("paros/agy-events.log")), "Stop\t%s\tUSER_CANCELED\n" % CONVERSATION, "one line")
+
+
+func test_agy_question_subagents_kill_timer_errors_and_checkpoint() -> void:
+	if OS.get_name() != "Linux":
+		return
+	var sense := agy_sense()
+	write(folder.path_join("agy/annotations/%s.pbtxt" % CONVERSATION), 'title:"New Conversation"\n')
+	add_steps(sense, [
+		# An older version of agy: a type per tool result.
+		{"type": "USER_INPUT", "content": "<USER_REQUEST>\nold\n</USER_REQUEST>"},
+		call_step("run_command", {"CommandLine": "mvn spring-boot:run"}),
+		{"type": "RUN_COMMAND", "source": "MODEL", "status": "RUNNING", "content": "Tool is running as a background task with task id: %s/task-3" % CONVERSATION},
+		{"type": "PLANNER_RESPONSE", "content": "Started."},
+	])
+	check_equal(last_event(&"session_opened").get("name"), "my work", "the title agy gives at first is no name")
+	check_equal(last_event(&"session_background").get("background"), 1, "a task read from a result of the older format")
+	add_steps(sense, [
+		{"type": "USER_INPUT", "content": "<USER_REQUEST>\ngo\n</USER_REQUEST>"},
+		call_step("manage_task", {"Action": "kill", "TaskId": "%s/task-3" % CONVERSATION}),
+	])
+	check_equal(last_event(&"session_background").get("background"), 0, "a killed task is over")
+	add_steps(sense, [
+		result_step('Task "%s/task-3" cancelled.' % CONVERSATION),
+		call_step("schedule", {"DurationSeconds": "5", "Prompt": "check"}),
+		result_step("Tool is running as a background task with task id: %s/task-9\nTask Description: Timer: 5s" % CONVERSATION, "RUNNING"),
+		{"type": "PLANNER_RESPONSE", "content": "Waiting for the timer."},
+	])
+	check_equal(last_event(&"session_background"), {"session": CONVERSATION, "background": 1, "servers": 0}, "a timer is waited for")
+	add_steps(sense, [{"type": "SYSTEM_MESSAGE", "source": "SYSTEM", "content": "[Message] timestamp=x sender=%s/task-9 priority=MESSAGE_PRIORITY_HIGH content=check" % CONVERSATION}])
+	check_equal(last_event(&"session_background").get("background"), 0, "the timer went off")
+	check_equal(last_event(&"session_phase").get("phase"), &"working", "and wakes the model")
+
+	add_steps(sense, [
+		call_step("search_web", {"query": "godot read_link", "toolSummary": "Search"}),
+		result_step("The search returned"),
+		call_step("view_file", {"AbsolutePath": "/tmp/missing.txt"}),
+		{"type": "GENERIC", "source": "MODEL", "status": "ERROR", "error": "failed to read file: stat /tmp/missing.txt", "content": "Encountered error"},
+	])
+	check(event_names().has(&"session_activity") and _events.any(func(event: Array) -> bool: return event[0] == &"session_activity" and event[1].detail == "godot read_link"), "the search is shown")
+	check_equal(last_event(&"session_tool_failed").get("tool"), "view_file", "a tool in error")
+	check_equal(last_event(&"session_tool_failed").get("detail"), "failed to read file: stat /tmp/missing.txt", "with its error")
+
+	add_steps(sense, [call_step("ask_question", {"questions": [{"question": "Which database?", "options": ["H2", "PostgreSQL"]}]})])
+	check_equal(last_event(&"session_phase").get("phase"), &"waiting", "waits for the answer of the user")
+	check_equal(last_event(&"session_needs_you").get("detail"), "Which database?", "the question")
+	add_steps(sense, [result_step("A1: H2")])
+	check_equal(last_event(&"session_phase").get("phase"), &"working", "answered")
+
+	var subagent := "a42bbca8-3f35-4a43-8637-0409a98ee460"
+	add_steps(sense, [
+		call_step("invoke_subagent", {"Subagents": [{"Role": "Sense Counter", "TypeName": "research", "Prompt": "count"}]}),
+		result_step('Created the following subagents:\n{\n  "conversationId": "%s",\n  "logAbsoluteUri": "file:///x"\n}' % subagent),
+	])
+	var path := folder.path_join("agy/brain/%s/.system_generated/logs/transcript_full.jsonl" % subagent)
+	write(path, "\n".join([
+		JSON.stringify({"type": "SYSTEM_MESSAGE", "source": "SYSTEM", "content": "[Message] timestamp=x sender=%s priority=HIGH content=count" % CONVERSATION}),
+		JSON.stringify(call_step("run_command", {"CommandLine": "ls src/senses", "toolSummary": "List senses"})),
+	]) + "\n")
+	sense._poll()
+	check_equal(last_event(&"session_subagents").get("agents"), [{"id": subagent, "name": "Sense Counter", "tool": "run_command", "detail": "List senses"}], "a small pet per subagent, with its tool")
+	var file := FileAccess.open(path, FileAccess.READ_WRITE)
+	file.seek_end()
+	file.store_string(JSON.stringify(result_step("The command exited with code 2.")) + "\n" + JSON.stringify({"type": "PLANNER_RESPONSE", "content": "16 files."}) + "\n")
+	file.close()
+	sense._poll()
+	check_equal(last_event(&"session_tool_failed").get("agent"), subagent, "the failure of the subagent")
+	check_equal(last_event(&"session_subagents").get("count"), 0, "its work is done")
+
+	add_steps(sense, [{"type": "CHECKPOINT", "source": "SYSTEM", "content": "{{ CHECKPOINT 0 }} The earlier parts of this conversation have been truncated"}])
+	check_equal(last_event(&"session_compacting"), {"session": CONVERSATION, "compacting": false, "auto": true}, "the context was truncated")
+	sense.free()

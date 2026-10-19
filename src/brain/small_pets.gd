@@ -114,6 +114,7 @@ func dress(session: String, texts: Dictionary) -> void:
 	for small: Dictionary in _groups.get(session, []):
 		var pet: Pet = small.pet
 		var text: Array = texts.get(small.id, ["", ""])
+		pet.kind = parent.kind
 		pet.color = parent.color.lightened(0.15)
 		pet.caption = text[0]
 		pet.show_card(text[1] if pet.hovered else "")

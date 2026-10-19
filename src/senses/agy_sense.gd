@@ -7,14 +7,23 @@ extends Node
 ##     the one agy gives it), else the name of its folder. color and summary
 ##     stay empty: agy has neither,
 ##   session_closed,
-##   session_phase {phase: &"idle" | &"working", since}. agy tells no wait for
-##     the user that can be read,
+##   session_phase {phase: &"idle" | &"working" | &"waiting", since}. waiting:
+##     the model asked the user a question (ask_question) and waits for the
+##     answer. A wait for a permission is written nowhere,
+##   session_needs_you {detail}: the question,
 ##   session_activity {tool, detail}, session_quiet {level},
-##   session_background {background, servers}: commands started in the
-##     background that still run,
+##   session_background {background, servers}: commands and timers started in
+##     the background that still run,
+##   session_compacting {compacting, auto}: agy truncated the start of the
+##     conversation, replaced by a summary. Told once done: both come one after
+##     the other,
 ##   session_finished, session_tests_passed,
+##   session_subagents {count, agents: [{id, name, tool, detail}]}: the
+##     running subagents (invoke_subagent), oldest first, each named after the
+##     role it was given, with the tool it uses,
 ##   session_tool_failed {tool, detail, kind, agent}: a command that exited
-##     with an error. agent is always empty,
+##     with an error, or a tool that failed. agent: id of the subagent it
+##     comes from, empty for the session,
 ##   session_turn {origin, from}: &"human", or &"peer" for a message of the
 ##     agent bridge (Diaulos), from naming its sender,
 ##   session_message_sent {to}: the session wrote to that address of the agent
@@ -27,8 +36,10 @@ extends Node
 ## - annotations/<conversation id>.pbtxt: the title of the conversation.
 ## - brain/<conversation id>/.system_generated/logs/transcript_full.jsonl: one
 ##   line per step, written once the step is done. The answer of the model with
-##   its tool calls comes before their results. An answer with no tool call ends
-##   the turn.
+##   its tool calls comes before their results, one step each. An answer with
+##   no tool call ends the turn. A message of the system (end of a background
+##   task or of a timer, report of a subagent) starts work again. Each
+##   subagent has a conversation of its own, with its own transcript.
 ## - the log written by hooks/agy-hook.sh, one line per Stop: a turn that ends
 ##   cancelled or on an error has no last answer.
 ## - ~/.agent-bridge/inbox/agy-<conversation id>/: messages of the agent bridge.
@@ -47,9 +58,24 @@ const NORMAL_END := "NO_TOOL_CALL"
 ## A first look at a session that seems to work: when its last step is older
 ## than this, its turn ended without a trace, cancelled before Paros started.
 const STALE_SECONDS := 600.0
-## Tool arguments that hold the path of the file a tool works on.
-const PATH_ARGS: Array[String] = ["AbsolutePath", "TargetFile", "File", "DirectoryPath", "SearchPath"]
+## Title agy gives a conversation until it finds a better one.
+const UNTITLED := "New Conversation"
+## Tool arguments that hold the path of the file a tool works on, then those
+## shown as they are: an address, a search.
+const PATH_ARGS: Array[String] = ["AbsolutePath", "TargetFile", "File", "DirectoryPath", "SearchPath", "SearchDirectory"]
+const TEXT_ARGS: Array[String] = ["Url", "query", "Query", "Pattern"]
 const COMMAND_TOOL := "run_command"
+## Asks the user, and waits for the answer.
+const QUESTION_TOOL := "ask_question"
+## Stops a task started in the background: its end is told nowhere else.
+const TASK_TOOL := "manage_task"
+const KILL_ACTION := "kill"
+## Starts subagents. Its result gives the conversation id of each.
+const SUBAGENT_TOOL := "invoke_subagent"
+## In a message of the system: what it tells, then who sends it.
+const MESSAGE_MARK := "[Message]"
+## Step that replaces the start of a conversation grown too long with a summary.
+const CHECKPOINT := "CHECKPOINT"
 ## Tokens are posted rounded to this step, to post less often.
 const TOKEN_STEP := 10000
 ## Seconds without a new step that make a working session quiet at level 1, then 2.
@@ -71,13 +97,15 @@ var _live := {}
 ## transcript was read once), calls (tool calls whose result is not read yet,
 ## oldest first, each {name, args}), tasks (background task id -> server),
 ## background, servers, mail, heard (time of its last sign of life), quiet,
-## origin, asker, last_step (Unix time of the last step read).
+## origin, asker, last_step (Unix time of the last step read), subagents
+## (conversation id -> {id, name, tool, detail, running, calls, offset, known}).
 var _sessions := {}
 var _test_command := RegEx.create_from_string(
 	"(^|[ /;&|])(pytest|jest|vitest|phpunit|rspec|ctest)([ ;&|]|$)|(npm|pnpm|yarn|bun|cargo|go|dotnet|mvn|gradle|make|composer)( run)? test")
 var _exit_code := RegEx.create_from_string("The command exited with code (-?\\d+)")
 var _task_started := RegEx.create_from_string("running as a background task with task id: (\\S+)")
-var _task_ended := RegEx.create_from_string('Task id "([^"]+)" finished')
+var _message_sender := RegEx.create_from_string("\\[Message\\][^\\n]* sender=(\\S+)")
+var _subagent_id := RegEx.create_from_string('"conversationId":\\s*"([^"]+)"')
 var _bridge_send := RegEx.create_from_string("bridge\\.py\"?\\s+send\\s+\"?([^\\s\"]+)")
 var _sender := RegEx.create_from_string('<bridge-message [^>]*from="([^"]+)"')
 var _request := RegEx.create_from_string("(?s)<USER_REQUEST>\\s*(.*?)\\s*</USER_REQUEST>")
@@ -143,7 +171,7 @@ func _update(id: String, process: Dictionary) -> void:
 	if opened:
 		_sessions[id] = {
 			"name": "", "color": "", "cwd": "", "last_prompt": "", "pid": 0, "context": 0, "summary": "", "kind": &"agy",
-			"working": false, "phase": &"", "transcript_offset": 0, "known": false, "calls": [], "tasks": {},
+			"working": false, "phase": &"", "transcript_offset": 0, "known": false, "calls": [], "tasks": {}, "subagents": {},
 			"background": 0, "servers": 0, "mail": 0, "heard": _now(), "quiet": 0, "origin": &"", "asker": "", "last_step": 0.0,
 		}
 	var session: Dictionary = _sessions[id]
@@ -152,9 +180,10 @@ func _update(id: String, process: Dictionary) -> void:
 	session.cwd = process.cwd
 	if _scan_in == SCAN_SECONDS or opened:
 		session.name = _read_title(id)
-		if session.name.is_empty():
+		if session.name in ["", UNTITLED]:
 			session.name = session.cwd.get_file()
 	_read_transcript(id, session)
+	_read_subagents(id, session)
 	if not session.known:
 		session.known = true
 		# A turn told working with nothing new for long ended unseen.
@@ -265,45 +294,72 @@ func _read_step(id: String, session: Dictionary, step: Dictionary) -> void:
 			for call: Variant in calls:
 				if call is Dictionary:
 					var args: Dictionary = call.get("args") if call.get("args") is Dictionary else {}
-					session.calls.append({"name": str(call.get("name", "")), "args": args})
+					var tool := str(call.get("name", ""))
+					session.calls.append({"name": tool, "args": args})
+					if tool == TASK_TOOL and args.get("Action") == KILL_ACTION:
+						session.tasks.erase(str(args.get("TaskId", "")))
 					if session.known:
-						_read_call(id, str(call.get("name", "")), args)
-		"GENERIC":
-			if step.get("source") == "MODEL" and not session.calls.is_empty():
-				_read_result(id, session, session.calls.pop_front(), content, step.get("status") == "RUNNING")
+						_read_call(id, tool, args)
+		CHECKPOINT:
+			session.context = 0
+			if session.known:
+				Events.post(&"session_compacting", {"session": id, "compacting": true, "auto": true})
+				Events.post(&"session_compacting", {"session": id, "compacting": false, "auto": true})
 		"SYSTEM_MESSAGE":
-			var ended := _task_ended.search(content)
-			if ended and session.tasks.has(ended.get_string(1)):
-				session.tasks.erase(ended.get_string(1))
-				# agy hands the model the end of the task: a new turn of work.
+			# The end of a background task or of a timer, the report of a
+			# subagent: agy hands it to the model, a new turn of work.
+			var sender := _message_sender.search(content)
+			if sender and step.get("source") == "SYSTEM":
+				session.tasks.erase(sender.get_string(1))
 				session.working = true
+		_:
+			# The result of a tool call: GENERIC, or for older versions of agy,
+			# a type per tool, such as RUN_COMMAND or CODE_ACTION.
+			if step.get("source") == "MODEL" and not session.calls.is_empty():
+				_read_result(id, session, session.calls.pop_front(), step)
 
 
 ## A tool call of the model, before its result.
 func _read_call(id: String, tool: String, args: Dictionary) -> void:
-	var detail := ""
-	for key in PATH_ARGS:
-		if args.has(key):
-			detail = str(args[key]).get_file()
-			break
-	if detail.is_empty():
-		detail = str(args.get("toolSummary", ""))
-	Events.post(&"session_activity", {"session": id, "tool": tool, "detail": detail})
+	Events.post(&"session_activity", {"session": id, "tool": tool, "detail": _detail(args)})
+	if tool == QUESTION_TOOL:
+		var questions: Variant = args.get("questions")
+		var first: Variant = questions[0] if questions is Array and not questions.is_empty() else {}
+		Events.post(&"session_needs_you", {"session": id, "detail": str(first.get("question", "")) if first is Dictionary else ""})
 	if tool == COMMAND_TOOL:
 		var sent := _bridge_send.search(str(args.get("CommandLine", "")))
 		if sent:
 			Events.post(&"session_message_sent", {"session": id, "to": sent.get_string(1)})
 
 
-## The result of a tool call. running: the tool goes on in the background.
-func _read_result(id: String, session: Dictionary, call: Dictionary, content: String, running: bool) -> void:
-	if call.name != COMMAND_TOOL:
-		return
+## What a tool call works on: a file, an address, a search, else its summary.
+func _detail(args: Dictionary) -> String:
+	for key in PATH_ARGS + TEXT_ARGS:
+		if args.has(key):
+			return str(args[key]).get_file() if key in PATH_ARGS else str(args[key])
+	return str(args.get("toolSummary", ""))
+
+
+## The result of a tool call, in the given step. Its status is RUNNING when
+## the tool goes on in the background, ERROR when it failed.
+func _read_result(id: String, session: Dictionary, call: Dictionary, step: Dictionary) -> void:
+	var content := str(step.get("content", ""))
 	var command := str(call.args.get("CommandLine", ""))
-	if running:
-		var started := _task_started.search(content)
-		if started:
-			session.tasks[started.get_string(1)] = ClaudeCodeSense.is_server(command)
+	if call.name == SUBAGENT_TOOL:
+		_add_subagents(session, call.args, content)
+	match step.get("status"):
+		"RUNNING":
+			var started := _task_started.search(content)
+			if started:
+				session.tasks[started.get_string(1)] = call.name == COMMAND_TOOL and ClaudeCodeSense.is_server(command)
+			return
+		"ERROR":
+			if session.known:
+				Events.post(&"session_tool_failed", {
+					"session": id, "tool": call.name, "detail": str(step.get("error", "")).left(120), "kind": "", "agent": "",
+				})
+			return
+	if call.name != COMMAND_TOOL:
 		return
 	var code := _exit_code.search(content)
 	if code == null or not session.known:
@@ -316,6 +372,81 @@ func _read_result(id: String, session: Dictionary, call: Dictionary, content: St
 		})
 	elif test:
 		Events.post(&"session_tests_passed", {"session": id})
+
+
+## Notes the subagents that the result of an invoke_subagent call created,
+## named after the roles of its arguments, in the same order.
+func _add_subagents(session: Dictionary, args: Dictionary, content: String) -> void:
+	var roles: Array = args.get("Subagents") if args.get("Subagents") is Array else []
+	var created := _subagent_id.search_all(content)
+	for i in created.size():
+		var role: Variant = roles[i] if i < roles.size() else {}
+		var agent_id := created[i].get_string(1)
+		session.subagents[agent_id] = {
+			"id": agent_id, "name": str(role.get("Role", role.get("TypeName", ""))) if role is Dictionary else "",
+			"tool": "", "detail": "", "running": false, "calls": [], "offset": 0, "known": session.known,
+		}
+
+
+## Reads what was added to the transcript of each subagent, and posts the
+## running ones when they changed.
+func _read_subagents(id: String, session: Dictionary) -> void:
+	var before := _running(session)
+	for agent: Dictionary in session.subagents.values():
+		var file := FileAccess.open(_agy_dir.path_join("brain").path_join(agent.id).path_join(TRANSCRIPT), FileAccess.READ)
+		if file == null:
+			continue
+		file.seek(agent.offset)
+		while file.get_position() < file.get_length():
+			var line := file.get_line()
+			if file.eof_reached():
+				break
+			agent.offset = file.get_position()
+			var step: Variant = JSON.parse_string(line)
+			if step is Dictionary:
+				_read_subagent_step(id, agent, step)
+		agent.known = true
+	var after := _running(session)
+	if after != before:
+		Events.post(&"session_subagents", {"session": id, "count": after.size(), "agents": after})
+
+
+func _read_subagent_step(id: String, agent: Dictionary, step: Dictionary) -> void:
+	match step.get("type"):
+		"PLANNER_RESPONSE":
+			var calls: Array = step.get("tool_calls") if step.get("tool_calls") is Array else []
+			# An answer with no tool call: its work is done, until it is given more.
+			agent.running = not calls.is_empty()
+			agent.calls.clear()
+			for call: Variant in calls:
+				if call is Dictionary:
+					var args: Dictionary = call.get("args") if call.get("args") is Dictionary else {}
+					agent.calls.append({"name": str(call.get("name", "")), "args": args})
+			if not agent.calls.is_empty():
+				agent.tool = agent.calls[0].name
+				agent.detail = _detail(agent.calls[0].args)
+		"USER_INPUT":
+			agent.running = true
+		"SYSTEM_MESSAGE":
+			if step.get("source") == "SYSTEM" and MESSAGE_MARK in str(step.get("content", "")):
+				agent.running = true
+		_:
+			if step.get("source") != "MODEL" or agent.calls.is_empty():
+				return
+			var call: Dictionary = agent.calls.pop_front()
+			var code := _exit_code.search(str(step.get("content", "")))
+			var failed: bool = step.get("status") == "ERROR" or (code != null and code.get_string(1) != "0")
+			if failed and agent.known:
+				Events.post(&"session_tool_failed", {"session": id, "tool": call.name, "detail": _detail(call.args), "kind": "", "agent": agent.id})
+
+
+## The running subagents, oldest first, each {id, name, tool, detail}.
+func _running(session: Dictionary) -> Array:
+	var running := []
+	for agent: Dictionary in session.subagents.values():
+		if agent.running:
+			running.append({"id": agent.id, "name": agent.name, "tool": agent.tool, "detail": agent.detail})
+	return running
 
 
 func _post_turn(id: String, session: Dictionary) -> void:
@@ -353,6 +484,8 @@ func _update_mail(id: String) -> void:
 func _update_phase(id: String) -> void:
 	var session: Dictionary = _sessions[id]
 	var phase := &"working" if session.working else &"idle"
+	if session.working and session.calls.any(func(call: Dictionary) -> bool: return call.name == QUESTION_TOOL):
+		phase = &"waiting"
 	if phase != session.phase:
 		session.phase = phase
 		session.heard = _now()
