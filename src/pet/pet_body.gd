@@ -28,7 +28,8 @@ const AGY_ROWS: PackedStringArray = [
 	"67b9f4 64b6f6 ------ ------ ------ ------ ------ ------ ------ ------ 3883f9 3d85fc",
 ]
 ## Its arms, on each side of the widest row, in the color of the cell they
-## touch. Shown only while raised: at rest the "A" keeps its shape.
+## touch. Shown only while raised, or the back one while it carries folders:
+## at rest the "A" keeps its shape.
 const AGY_ARMS: Array[Array] = [[Rect2(-6, -6, 2, 2), Color("#7cc251")], [Rect2(4, -6, 2, 2), Color("#9c5b97")]]
 const AGY_EYES: Array[Rect2] = [Rect2(-2, -7, 1, 2), Rect2(1, -7, 1, 2)]
 
@@ -392,7 +393,8 @@ func _draw() -> void:
 	if _pet.kind == &"agy":
 		_blocks(_agy_body, body_offset, false)
 		for i in AGY_ARMS.size():
-			if arm_raise[i] > 0.0:
+			# The back arm also shows to carry the folders.
+			if arm_raise[i] > 0.0 or (i != front and _pet.baggage > 0):
 				_block(AGY_ARMS[i][0], body_offset - Vector2(0, arm_raise[i] * UNIT), AGY_ARMS[i][1])
 	else:
 		_block(BODY, body_offset, _pet.color)
@@ -622,6 +624,9 @@ func _draw_mantra(body_offset: Vector2, in_front: bool) -> void:
 func _draw_baggage(body_offset: Vector2) -> void:
 	for i in _pet.baggage:
 		var folder := Rect2(-8.8, -7.3 - i * 1.4, 2.8, 1.2)
+		# The arms of the "A" are closer to its middle.
+		if _pet.kind == &"agy":
+			folder.position.x += 2.2
 		_blocks([[folder, MANILA], [Rect2(folder.position.x, folder.position.y - 0.3, 1.2, 0.3), MANILA.darkened(0.2)]], body_offset, true)
 
 
