@@ -1,7 +1,8 @@
 extends Node
 ## Turns sensed events into pet behavior. All rules live here, but the games
 ## of the small pets: see small_pets.gd.
-## One pet per Claude Code session. With no session, one pet with no name.
+## One pet per Claude Code session, and per agy session. With no session, one
+## pet with no name.
 ## One small pet per running subagent, beside the pet of its session.
 ## One sage beside a pet whose session asks the advisor.
 ## A pet whose session compacts its context throws away sheets of its head.
@@ -19,6 +20,10 @@ const COLORS := {
 	"pink": Color("#e86aa6"),
 	"cyan": Color("#3bb8c4"),
 }
+## Name tag of an agy pet, which has no /color: the blue of its mascot.
+const AGY_COLOR := Color("#4a81f0")
+## Tokens in the context window of the Gemini models of agy.
+const AGY_CONTEXT_TOKENS := 1000000
 const TICK_SECONDS := 1.0
 ## Seconds between two reminders of the same waiting session.
 const NAG_REPEAT_SECONDS := 60.0
@@ -391,10 +396,12 @@ func _refresh() -> void:
 func _dress(pet: Pet, session: Dictionary) -> void:
 	var branch: String = session.get("branch", "")
 	pet.label = session.name if branch.is_empty() else "%s · %s" % [session.name, branch]
-	pet.color = COLORS.get(session.color, Pet.DEFAULT_COLOR)
+	pet.kind = session.get("kind", &"claude")
+	pet.color = COLORS.get(session.color, AGY_COLOR if pet.kind == &"agy" else Pet.DEFAULT_COLOR)
 	# From the name: the same session keeps its accessory.
 	pet.accessory = posmod(hash(session.name), Pet.ACCESSORY_COUNT)
-	pet.fullness = session.context / (Settings.value("claude", "context_window_k") * 1000.0)
+	var window: float = AGY_CONTEXT_TOKENS if pet.kind == &"agy" else Settings.value("claude", "context_window_k") * 1000.0
+	pet.fullness = session.context / window
 	pet.baggage = BAGGAGE_LEVELS.filter(func(level: int) -> bool: return session.get("dirty", 0) >= level).size()
 	pet.hard_hat = session.get("conflict", false)
 	pet.strained = session.get("compact", false) and session.get("auto", false)
@@ -434,12 +441,38 @@ func _awaits_peer(session: Dictionary) -> bool:
 
 ## Id of the session with the given name, other than the given one. Empty: none.
 ## The name may end with a reference in brackets, as in "Alpha [1a2b3c]".
+## Key of the session that a message was sent to, other than but. name: a
+## session name, or an address of the agent bridge (Diaulos): "claude:<name>",
+## "agy:<name or start of the conversation id>", "<kind>@<part of the folder>",
+## or "claude" or "agy" alone when one other session of that kind runs.
 func _session_named(name: String, but: String) -> String:
 	var wanted := name.get_slice(" [", 0)
+	var kind := ""
+	var folder := ""
+	if wanted in ["claude", "agy"]:
+		kind = wanted
+		wanted = ""
+	elif wanted.get_slice(":", 0) in ["claude", "agy"] and ":" in wanted:
+		kind = wanted.get_slice(":", 0)
+		wanted = wanted.substr(kind.length() + 1)
+	elif wanted.get_slice("@", 0) in ["claude", "agy"] and "@" in wanted:
+		kind = wanted.get_slice("@", 0)
+		folder = wanted.substr(kind.length() + 1)
+		wanted = ""
+	elif wanted.is_empty():
+		return ""
+	var found: Array[String] = []
 	for key: String in _sessions:
-		if key != but and _sessions[key].get("name", "") == wanted:
+		var session: Dictionary = _sessions[key]
+		if key == but or (not kind.is_empty() and str(session.get("kind", &"claude")) != kind):
+			continue
+		if not wanted.is_empty() and session.get("name", "") == wanted:
 			return key
-	return ""
+		if kind == "agy" and not wanted.is_empty() and key.begins_with(wanted):
+			return key
+		if wanted.is_empty() and (folder.is_empty() or folder in session.get("cwd", "")):
+			found.append(key)
+	return found[0] if found.size() == 1 else ""
 
 
 ## Sends the nearest free pet to sleep beside the still pointer.

@@ -658,3 +658,138 @@ func test_terminal_helper_finds_the_advisor_at_work() -> void:
 		var output := []
 		OS.execute("sh", ["-c", "python3 -I '%s' --test < '%s'" % [script, folder.path_join("screen.txt")]], output)
 		check_equal(str(output[0]).strip_edges(), screens[screen], "screen that ends with: " + screen.left(60).replace("\n", " / "))
+
+
+const CONVERSATION := "c6bdd622-affe-47d2-889d-2409d3b69971"
+
+
+## An agy sense that reads a fake agy folder and a fake /proc, where one agy
+## process runs the conversation CONVERSATION in the folder "work".
+func agy_sense() -> Node:
+	var sense: Node = load("res://src/senses/agy_sense.gd").new()
+	sense._agy_dir = folder.path_join("agy")
+	sense._bridge_dir = folder.path_join("bridge")
+	sense._proc_dir = folder.path_join("proc")
+	sense._log_path = folder.path_join("agy-events.log")
+	write(folder.path_join("proc/4242/comm"), "agy\n")
+	write(folder.path_join("proc/7/comm"), "bash\n")
+	write(folder.path_join("agy/presence/%s.lock" % CONVERSATION), "")
+	DirAccess.make_dir_recursive_absolute(folder.path_join("proc/4242/fd"))
+	DirAccess.make_dir_recursive_absolute(folder.path_join("my work"))
+	OS.execute("ln", ["-s", folder.path_join("agy/presence/%s.lock" % CONVERSATION), folder.path_join("proc/4242/fd/75")])
+	OS.execute("ln", ["-s", "/dev/null", folder.path_join("proc/4242/fd/0")])
+	OS.execute("ln", ["-s", folder.path_join("my work"), folder.path_join("proc/4242/cwd")])
+	return sense
+
+
+## Adds steps to the transcript of CONVERSATION, then polls.
+func add_steps(sense: Node, steps: Array) -> void:
+	var path := folder.path_join("agy/brain/%s/.system_generated/logs/transcript_full.jsonl" % CONVERSATION)
+	if not FileAccess.file_exists(path):
+		write(path, "")
+	var file := FileAccess.open(path, FileAccess.READ_WRITE)
+	file.seek_end()
+	for step: Dictionary in steps:
+		step.merge({"created_at": Time.get_datetime_string_from_system(true) + "Z"})
+		file.store_string(JSON.stringify(step) + "\n")
+	file.close()
+	sense._poll()
+
+
+func call_step(name: String, args: Dictionary, tokens := 0) -> Dictionary:
+	return {"type": "PLANNER_RESPONSE", "source": "MODEL", "input_tokens": tokens, "tool_calls": [{"name": name, "args": args}]}
+
+
+func result_step(content: String, status := "DONE") -> Dictionary:
+	return {"type": "GENERIC", "source": "MODEL", "status": status, "content": content}
+
+
+func test_agy_session_opens_works_then_closes() -> void:
+	if OS.get_name() != "Linux":
+		return
+	var sense := agy_sense()
+	write(folder.path_join("agy/annotations/%s.pbtxt" % CONVERSATION), 'title:"Probl\\303\\250me \\"A\\""\n')
+	add_steps(sense, [
+		{"type": "USER_INPUT", "content": "<USER_REQUEST>\nfix the bug\n</USER_REQUEST>\n<ADDITIONAL_METADATA>x</ADDITIONAL_METADATA>"},
+		{"type": "PLANNER_RESPONSE", "input_tokens": 3000, "cache_read_tokens": 14842, "content": "Done."},
+	])
+	var opened := last_event(&"session_opened")
+	check_equal(opened.get("session"), CONVERSATION, "the conversation is the session")
+	check_equal(opened.get("name"), 'Problème "A"', "named after its title, escapes read")
+	check_equal(opened.get("kind"), &"agy", "an agy session")
+	check_equal(opened.get("pid"), 4242, "its process")
+	check_equal(opened.get("cwd"), folder.path_join("my work"), "its folder")
+	check_equal(opened.get("last_prompt"), "fix the bug", "the request, without what agy adds")
+	check_equal(opened.get("context"), 20000, "input tokens, rounded")
+	check_equal(last_event(&"session_phase").get("phase"), &"idle", "the turn was over before")
+	check(&"session_finished" not in event_names(), "an old turn is no news")
+
+	add_steps(sense, [
+		{"type": "USER_INPUT", "content": "<USER_REQUEST>\nrun the tests\n</USER_REQUEST>"},
+		call_step("view_file", {"AbsolutePath": "/work/README.md", "toolSummary": "Read"}),
+	])
+	check_equal(last_event(&"session_phase").get("phase"), &"working", "works from the request on")
+	check_equal(last_event(&"session_turn").get("origin"), &"human", "a turn of the user")
+	check_equal(last_event(&"session_activity"), {"session": CONVERSATION, "tool": "view_file", "detail": "README.md"}, "tool and file")
+	add_steps(sense, [
+		result_step("File Path: README.md"),
+		call_step("run_command", {"CommandLine": "npm test", "toolSummary": "Run tests"}),
+		result_step("The command exited with code 1.\nOutput:\nfail"),
+	])
+	check_equal(last_event(&"session_tool_failed").get("kind"), "test", "red tests")
+	check_equal(last_event(&"session_tool_failed").get("detail"), "Run tests", "with the summary of the command")
+	add_steps(sense, [call_step("run_command", {"CommandLine": "npm test"}), result_step("The command exited with code 0.")])
+	check(&"session_tests_passed" in event_names(), "green tests")
+	add_steps(sense, [{"type": "PLANNER_RESPONSE", "content": "All green."}])
+	check(&"session_finished" in event_names(), "the last answer ends the turn")
+	check_equal(last_event(&"session_phase").get("phase"), &"idle", "at rest")
+
+	OS.execute("rm", [folder.path_join("proc/4242/fd/75")])
+	sense._scan_in = 0.0
+	sense._poll()
+	check(&"session_closed" in event_names(), "closed when the process lets go of its conversation")
+	sense.free()
+
+
+func test_agy_background_tasks_letters_and_cancel() -> void:
+	if OS.get_name() != "Linux":
+		return
+	var sense := agy_sense()
+	add_steps(sense, [{"type": "PLANNER_RESPONSE", "content": "Hello."}])
+	check_equal(last_event(&"session_opened").get("name"), "my work", "no title: named after its folder")
+	add_steps(sense, [
+		{"type": "USER_INPUT", "content": '<USER_REQUEST>\nMessage(s)\n<bridge-message id="1" from="claude:paros-35" ts="x">\nhi\n</bridge-message>\n</USER_REQUEST>'},
+		call_step("run_command", {"CommandLine": "sleep 12 && echo done"}),
+		result_step("Tool is running as a background task with task id: %s/task-17\nTask Description: sleep" % CONVERSATION, "RUNNING"),
+		call_step("run_command", {"CommandLine": '/usr/bin/python3 /home/me/.agent-bridge/bridge.py send claude:paros-35 "ok"'}),
+		result_step("The command exited with code 0."),
+		{"type": "PLANNER_RESPONSE", "content": "Launched, waiting."},
+	])
+	check_equal(last_event(&"session_turn"), {"session": CONVERSATION, "origin": &"peer", "from": "claude:paros-35"}, "a turn asked by a peer")
+	check_equal(last_event(&"session_message_sent").get("to"), "claude:paros-35", "wrote through the bridge")
+	check_equal(last_event(&"session_background").get("background"), 1, "a task runs in the background")
+	check_equal(last_event(&"session_phase").get("phase"), &"idle", "the turn is over, the task goes on")
+	add_steps(sense, [{"type": "SYSTEM_MESSAGE", "source": "SYSTEM", "content": 'content=Task id "%s/task-17" finished with result:' % CONVERSATION}])
+	check_equal(last_event(&"session_background").get("background"), 0, "the task ended")
+	check_equal(last_event(&"session_phase").get("phase"), &"working", "the model takes the result")
+
+	write(folder.path_join("bridge/inbox/agy-%s/1-a.json" % CONVERSATION), "{}")
+	sense._poll()
+	check_equal(last_event(&"session_mail").get("mail"), 1, "a message of the bridge waits")
+
+	write(sense._log_path, "Stop\t%s\tUSER_CANCELED\n" % CONVERSATION)
+	sense._poll()
+	check_equal(last_event(&"session_phase").get("phase"), &"idle", "cancelled: at rest with no last answer")
+	sense.free()
+
+
+func test_agy_hook_script_writes_one_line() -> void:
+	if OS.get_name() != "Linux":
+		return
+	var output: Array = []
+	var input := '{"conversationId":"%s","terminationReason":"USER_CANCELED","fullyIdle":true}' % CONVERSATION
+	write(folder.path_join("input.json"), input)
+	var script := ProjectSettings.globalize_path("res://hooks/agy-hook.sh")
+	OS.execute("sh", ["-c", "XDG_RUNTIME_DIR='%s' '%s' Stop < '%s'" % [folder, script, folder.path_join("input.json")]], output)
+	check_equal(output[0].strip_edges(), "{}", "answers with an empty object")
+	check_equal(FileAccess.get_file_as_string(folder.path_join("paros/agy-events.log")), "Stop\t%s\tUSER_CANCELED\n" % CONVERSATION, "one line")

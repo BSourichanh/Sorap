@@ -1,6 +1,6 @@
 extends Node2D
-## Draws the Claude mascot from code as blocks on a pixel grid, no image assets.
-## Reads the state of the parent Pet.
+## Draws the mascot of the agent of the session, Claude or agy, from code as
+## blocks on a pixel grid, no image assets. Reads the state of the parent Pet.
 
 ## Size of one grid unit, in pixels.
 const UNIT := 9.0
@@ -13,6 +13,24 @@ const ARMS: Array[Rect2] = [Rect2(-8, -6, 2, 2), Rect2(6, -6, 2, 2)]
 const EYES: Array[Rect2] = [Rect2(-4, -8, 1, 2), Rect2(3, -8, 1, 2)]
 const LEG_COLUMNS: Array[float] = [-5, -3, 2, 4]
 const LEG_HEIGHT := 2.0
+## The agy mascot: an "A" in a gradient, one cell per grid unit, the top row
+## at y -10. "------": no cell. The two last rows are its legs.
+const AGY_ROWS: PackedStringArray = [
+	"------ ------ ------ ------ ------ f2922e f07236 ------ ------ ------ ------ ------",
+	"------ ------ ------ ------ dbb131 f6912e f37337 f0583b ------ ------ ------ ------",
+	"------ ------ ------ 9ec345 b5b43e e2993d f67a34 f86a35 ef5442 ------ ------ ------",
+	"------ ------ ------ 86c64e 75b45e cc954d ef7947 e16652 e14f59 ------ ------ ------",
+	"------ ------ 7cc251 71c25c 5ca98f 5c91b3 8373b0 746fc3 995da8 9c5b97 ------ ------",
+	"------ ------ 80c654 54b881 4097de ------ ------ 4a7ee4 706ece 8f64b4 ------ ------",
+	"------ ------ 61c37d 43aeab ------ ------ ------ ------ 4a80ea 6c73d8 ------ ------",
+	"------ 6dc694 62bad5 47a8dc ------ ------ ------ ------ 3d89fb 4a81f0 6579e1 ------",
+	"------ 6bc7a3 64b6f6 ------ ------ ------ ------ ------ ------ 3886fb 4881f4 ------",
+	"67b9f4 64b6f6 ------ ------ ------ ------ ------ ------ ------ ------ 3883f9 3d85fc",
+]
+## Its arms, on each side of the widest row, in the color of the cell they
+## touch. Shown only while raised: at rest the "A" keeps its shape.
+const AGY_ARMS: Array[Array] = [[Rect2(-6, -6, 2, 2), Color("#7cc251")], [Rect2(4, -6, 2, 2), Color("#9c5b97")]]
+const AGY_EYES: Array[Rect2] = [Rect2(-2, -7, 1, 2), Rect2(1, -7, 1, 2)]
 
 const EYE := Color("#1f1e1d")
 const PAPER := Color("#fffdf8")
@@ -196,6 +214,11 @@ const SAGE_STAFF: Array[Array] = [
 ## Sheet of paper held above the head.
 const HELD_SHEET := Rect2(-3, -15.5, 6, 4)
 
+## Cells of the agy mascot, each [shape, color]: the body, then the legs,
+## the left one first, each from its top cell.
+static var _agy_body: Array[Array] = []
+static var _agy_legs: Array[Array] = [[], []]
+
 var _time := 0.0
 var _blink_in := 3.0
 ## What the last picture showed of the pet. A change draws at once.
@@ -207,6 +230,21 @@ var _shown := 0
 
 func _init() -> void:
 	assert(ACCESSORIES.size() == Pet.ACCESSORY_COUNT)
+	if _agy_body.is_empty():
+		_read_agy_rows()
+
+
+static func _read_agy_rows() -> void:
+	for row in AGY_ROWS.size():
+		var cells := AGY_ROWS[row].split(" ")
+		for column in cells.size():
+			if cells[column].begins_with("-"):
+				continue
+			var cell := [Rect2(column - cells.size() / 2.0, row - 10, 1, 1), Color(cells[column])]
+			if row < AGY_ROWS.size() - LEG_HEIGHT:
+				_agy_body.append(cell)
+			else:
+				_agy_legs[0 if column < cells.size() / 2.0 else 1].append(cell)
 
 
 func _ready() -> void:
@@ -236,7 +274,7 @@ func _look() -> int:
 		_pet.state, _pet.facing, _pet.label, _pet.color, _pet.accessory, _pet.caption, _pet.sheet, _pet.stature, _pet.sage,
 		_pet.urgent, _pet.hovered, _pet.fullness >= SMOKE_FROM, _pet.strained, _pet.baggage, _pet.hard_hat, _pet.lost,
 		_pet.tapping, _pet.umbrella, _pet.meditating, _pet.headlamp, _pet.cool, _pet.discreet,
-		_pet.rooted, _pet.is_perched(), _pet.grooving, _pet.mail, _pet.mailbox_side(), _pet.serving,
+		_pet.rooted, _pet.is_perched(), _pet.grooving, _pet.mail, _pet.mailbox_side(), _pet.serving, _pet.kind,
 	].hash()
 
 
@@ -351,9 +389,15 @@ func _draw() -> void:
 	if not seated:
 		_draw_legs(state, body_offset, hop, airborne)
 	_draw_baggage(body_offset)
-	_block(BODY, body_offset, _pet.color)
-	for i in ARMS.size():
-		_block(ARMS[i], body_offset - Vector2(0, arm_raise[i] * UNIT), _pet.color)
+	if _pet.kind == &"agy":
+		_blocks(_agy_body, body_offset, false)
+		for i in AGY_ARMS.size():
+			if arm_raise[i] > 0.0:
+				_block(AGY_ARMS[i][0], body_offset - Vector2(0, arm_raise[i] * UNIT), AGY_ARMS[i][1])
+	else:
+		_block(BODY, body_offset, _pet.color)
+		for i in ARMS.size():
+			_block(ARMS[i], body_offset - Vector2(0, arm_raise[i] * UNIT), _pet.color)
 	if _pet.cool:
 		# The eyes move, and would show past the edge of the lenses.
 		_blocks(SHADES, body_offset, false)
@@ -440,6 +484,9 @@ func _draw() -> void:
 
 
 func _draw_legs(state: Pet.State, body_offset: Vector2, hop: float, airborne: bool) -> void:
+	if _pet.kind == &"agy":
+		_draw_agy_legs(state, body_offset, hop, airborne)
+		return
 	var top := GROUND.y - LEG_HEIGHT * UNIT + body_offset.y
 	# The leg in front, on the side the pet faces.
 	var front_leg := LEG_COLUMNS.size() - 1 if _pet.facing > 0.0 else 0
@@ -454,6 +501,30 @@ func _draw_legs(state: Pet.State, body_offset: Vector2, hop: float, airborne: bo
 		elif state == Pet.State.THINK and _pet.tapping and i == front_leg:
 			bottom -= maxf(0.0, sin(_time * 12.0)) * UNIT * 0.7
 		draw_rect(Rect2(x, top, UNIT, bottom - top), _pet.color)
+
+
+## The two legs of the "A". The upper cells hang from the body and stretch
+## down to the foot, which stands on the ground or steps.
+func _draw_agy_legs(state: Pet.State, body_offset: Vector2, hop: float, airborne: bool) -> void:
+	var front_leg := 1 if _pet.facing > 0.0 else 0
+	for i in _agy_legs.size():
+		var lift := hop
+		var x := body_offset.x
+		if state == Pet.State.WALK:
+			lift += maxf(0.0, sin(_time * 9.0 * _pet.pace + i * PI)) * UNIT * 0.8
+		elif airborne:
+			x += sin(_time * 6.0 + i) * 2.0
+		elif state == Pet.State.THINK and _pet.tapping and i == front_leg:
+			lift += maxf(0.0, sin(_time * 12.0)) * UNIT * 0.7
+		var top := GROUND.y - LEG_HEIGHT * UNIT + body_offset.y
+		var foot := GROUND.y - UNIT - lift
+		for cell: Array in _agy_legs[i]:
+			var shape: Rect2 = cell[0]
+			var left := GROUND.x + shape.position.x * UNIT + x
+			if shape.position.y < -1.0:
+				draw_rect(Rect2(left, top, UNIT, maxf(foot - top, UNIT)), cell[1])
+			else:
+				draw_rect(Rect2(left, foot, UNIT, UNIT), cell[1])
 
 
 func _draw_eyes(state: Pet.State, body_offset: Vector2, meditating: bool) -> void:
@@ -491,7 +562,10 @@ func _draw_eyes(state: Pet.State, body_offset: Vector2, meditating: bool) -> voi
 	var color := EYE
 	if _pet.serving:
 		color = EYE.lerp(SIGNAL, sin(_time * TAU / SIGNAL_SECONDS) * 0.5 + 0.5)
-	for eye in EYES:
+	# The top of the "A" is narrow: its eyes move half as far.
+	if _pet.kind == &"agy":
+		look *= 0.5
+	for eye in AGY_EYES if _pet.kind == &"agy" else EYES:
 		var shape := eye
 		shape.position += look
 		if closed:

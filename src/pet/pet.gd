@@ -96,6 +96,9 @@ var wish := Wish.ROAM
 var key := ""
 ## Name shown under the pet. Empty: no name tag.
 var label := ""
+## Agent of the session: &"claude" for Claude Code, &"agy" for agy (Google
+## Antigravity CLI). The body draws the mascot of that agent.
+var kind := &"claude"
 var color := DEFAULT_COLOR
 ## Index in the accessory list of the body. 0: none.
 var accessory := 0

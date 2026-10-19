@@ -26,6 +26,7 @@ extends Node
 ##   session_tool_failed {tool, detail, kind, agent: id of the subagent it
 ##     comes from, empty for the session}, session_tests_passed,
 ##   session_message_sent {to}: the session wrote to the session of that name,
+##     or to that address of the agent bridge (Diaulos), such as "agy:<id>",
 ##   session_mail {mail}: messages of other sessions that wait in its queue.
 ##     A busy session reads them later, a session at rest at once,
 ##   session_collision {other, file, path}: the session could not write a file
@@ -124,9 +125,10 @@ const SUMMARY_HINT := " (disable recaps in /config)"
 ## In the transcript line of what starts a turn, before who did: the user,
 ## another session, a notice.
 const ORIGIN_MARK := '"origin":{"kind":"'
-## In the transcript line of an answer that writes to another session.
-const SEND_MARK := '"name":"SendMessage"'
-const SEND_TOOL := "SendMessage"
+## In the transcript line of an answer that writes to another session: a
+## Claude Code one, or any agent through the bridge (Diaulos). Then the tools.
+const SEND_MARKS: Array[String] = ['"name":"SendMessage"', '"name":"mcp__agent-bridge__send"']
+const SEND_TOOLS: Array[String] = ["SendMessage", "mcp__agent-bridge__send"]
 ## A background task with no notice of its end for this long is forgotten,
 ## unless the registry tells that a command still runs.
 const BACKGROUND_MAX_SECONDS := 1800.0
@@ -164,7 +166,7 @@ var _task_started := RegEx.create_from_string('"(?:backgroundTaskId|agentId)":"(
 var _written := {}
 var _task_call := RegEx.create_from_string('"tool_use_id":"([^"]+)"')
 ## A command that serves, or watches, until it is stopped.
-var _server := RegEx.create_from_string(
+static var _server := RegEx.create_from_string(
 	"(?:^|[\\s;&|(/])(?:vite|nodemon|webpack-dev-server|http-server|live-server|browser-sync|uvicorn|gunicorn)(?:$|[\\s;&|)])"
 	+ "|\\b(?:npm|pnpm|yarn|bun)(?: run)? (?:dev|start|serve|watch|preview)\\b"
 	+ "|\\b(?:next|astro|nuxt) dev\\b|\\b(?:ng|jekyll|hugo) serve|-m http\\.server|\\brunserver\\b|\\bflask run\\b"
@@ -288,7 +290,7 @@ func _read_transcript(id: String, session: Dictionary) -> void:
 			for stopped in _task_stopped.search_all(line):
 				session.tasks.erase(stopped.get_string(1))
 		# Messages sent before the first reading are old: their letters are gone.
-		if SEND_MARK in line and session.known:
+		if SEND_MARKS.any(func(mark: String) -> bool: return mark in line) and session.known:
 			for name in _recipients(line):
 				Events.post(&"session_message_sent", {"session": id, "to": name})
 		# Calls made before the first reading are old.
@@ -426,8 +428,9 @@ func _read_queue_line(line: String, session: Dictionary) -> void:
 ## Names of the sessions that the answer of the given transcript line writes to.
 func _recipients(line: String) -> PackedStringArray:
 	var names: PackedStringArray = []
-	for block in _tool_uses(line, SEND_TOOL):
-		names.append(str(block.input.get("to", "")))
+	for tool in SEND_TOOLS:
+		for block in _tool_uses(line, tool):
+			names.append(str(block.input.get("to", "")))
 	return names
 
 
@@ -446,7 +449,7 @@ func _tool_uses(line: String, tool: String) -> Array[Dictionary]:
 
 ## True when the command is one that serves or watches until it is stopped,
 ## such as "npm run dev".
-func is_server(command: String) -> bool:
+static func is_server(command: String) -> bool:
 	return _server.search(command) != null
 
 

@@ -675,3 +675,25 @@ func test_sage_leaves_with_the_turn_and_the_session() -> void:
 	Events.post(&"session_advisor", {"session": "s2", "asking": true})
 	check_equal(pets.find("s2/sage"), null, "no sage when the setting says so")
 	Settings.set_value("claude", "sage", true)
+
+
+func test_agy_pet_and_letters_through_the_bridge() -> void:
+	var claude := open("s1", "paros-35")
+	Events.post(&"session_opened", {
+		"session": "c6bdd622-affe", "name": "General Discussion", "color": "", "cwd": "/work/agy", "last_prompt": "",
+		"pid": 0, "context": 500000, "summary": "", "kind": &"agy",
+	})
+	var agy := pets.find("c6bdd622-affe")
+	freeze(agy)
+	check_equal(agy.kind, &"agy", "draws the agy mascot")
+	check_equal(claude.kind, &"claude", "the other one stays Claude")
+	check_equal(agy.color, brain.AGY_COLOR, "the blue of agy")
+	check_near(agy.fullness, 0.5, 0.01, "against the context window of Gemini")
+	for address in ["agy:c6bdd622", "agy:General Discussion", "agy", "agy@work/agy"]:
+		check_equal(brain._session_named(address, "s1"), "c6bdd622-affe", address)
+	for address in ["claude:paros-35", "claude", "paros-35"]:
+		check_equal(brain._session_named(address, "c6bdd622-affe"), "s1", address)
+	check_equal(brain._session_named("claude:paros-35", "s1"), "", "not to itself")
+	check_equal(brain._session_named("", "s1"), "", "no name")
+	Events.post(&"session_message_sent", {"session": "c6bdd622-affe", "to": "claude:paros-35"})
+	check_equal(pets._letters[0].recipient(), claude, "a letter from agy to Claude")
