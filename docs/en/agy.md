@@ -29,7 +29,7 @@ Linux only. Nothing to install: Paros reads the files agy writes. An optional ho
 
 Its arms show only while they rise: when it cheers, waves, throws or reads. At rest the "A" keeps the shape of the mascot.
 
-The git branch, the folders carried, the hard hat and the other reactions to the repository work as for a Claude Code session: see [Claude Code](claude-code.md).
+It wears no accessory: nothing sits well on the point of the "A". During a merge or a rebase, the warning sign stands beside it, without the hard hat. The git branch, the folders carried and the other reactions to the repository work as for a Claude Code session: see [Claude Code](claude-code.md).
 
 ## Diaulos
 

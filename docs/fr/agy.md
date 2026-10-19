@@ -29,7 +29,7 @@ Linux seulement. Rien à installer : Paros lit les fichiers qu'écrit agy. Un ho
 
 Ses bras n'apparaissent que lorsqu'ils se lèvent : quand il saute de joie, fait signe, lance ou lit. Au repos, le « A » garde la forme de la mascotte.
 
-La branche git, les dossiers portés, le casque de chantier et les autres réactions au dépôt fonctionnent comme pour une session Claude Code : voir [Claude Code](claude-code.md).
+Il ne porte aucun accessoire : rien ne tient bien sur la pointe du « A ». Pendant une fusion ou un rebase, le panneau d'avertissement se dresse à côté de lui, sans le casque de chantier. La branche git, les dossiers portés et les autres réactions au dépôt fonctionnent comme pour une session Claude Code : voir [Claude Code](claude-code.md).
 
 ## Diaulos
 

@@ -416,6 +416,9 @@ func _draw() -> void:
 	var worn: Dictionary = HARD_HAT
 	if _pet.sage:
 		worn = SAGE_HAT
+	elif _pet.kind == &"agy":
+		# Nothing sits well on the point of the "A": the warning sign alone tells a merge.
+		worn = ACCESSORIES[0]
 	elif not _pet.hard_hat:
 		worn = ACCESSORIES[_pet.accessory if Settings.value("pet", "accessories") else 0]
 	_blocks(worn.blocks, body_offset, false)
