@@ -285,7 +285,7 @@ func _on_sensed(event: StringName, data: Dictionary) -> void:
 			elif agent.is_empty():
 				pet.worry()
 				Sound.play(&"failure")
-				if data.kind == "test":
+				if data.test:
 					pet.say(tr("Red tests"))
 		&"focus_started":
 			_tell_all(tr("Focus: %d min") % Settings.value("focus", "minutes"))

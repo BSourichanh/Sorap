@@ -139,7 +139,7 @@ All carry `session`, the session id.
 | `session_needs_you` | `detail` | Bubble |
 | `session_finished` | | Jump, bubble, sound |
 | `session_tests_passed` | | Jump, bubble, sound |
-| `session_tool_failed` | `tool`, `detail`, `kind`, `agent` | Shake, sound. In a subagent: its small pet shakes, no sound |
+| `session_tool_failed` | `tool`, `detail`, `test`, `agent` | Shake, sound. In a subagent: its small pet shakes, no sound |
 
 ### agy sessions — `agy_sense.gd`
 

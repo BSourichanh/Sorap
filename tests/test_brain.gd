@@ -213,7 +213,7 @@ func test_each_subagent_has_a_small_pet() -> void:
 	check_equal(small[0].stature, 0.6, "the setting resizes them at once")
 	Settings.set_value("subagents", "size", 0.4)
 
-	Events.post(&"session_tool_failed", {"session": "s1", "tool": "Bash", "detail": "", "kind": "", "agent": "a2"})
+	Events.post(&"session_tool_failed", {"session": "s1", "tool": "Bash", "detail": "", "test": false, "agent": "a2"})
 	check_equal(small[1].state, Pet.State.WORRY, "the small pet of the subagent that failed worries")
 	check_equal(pet.state, Pet.State.IDLE, "not the pet of the session")
 
@@ -285,7 +285,7 @@ func test_reactions_to_results() -> void:
 	Events.post(&"session_tests_passed", {"session": "s1"})
 	check_equal(pet.state, Pet.State.CHEER, "cheers for green tests")
 	stand(pet)
-	Events.post(&"session_tool_failed", {"session": "s1", "tool": "Bash", "detail": "", "kind": ""})
+	Events.post(&"session_tool_failed", {"session": "s1", "tool": "Bash", "detail": "", "test": false})
 	check_equal(pet.state, Pet.State.WORRY, "worries on a failure")
 	stand(pet)
 	Events.post(&"session_finished", {"session": "s1"})
@@ -689,6 +689,9 @@ func test_agy_pet_and_letters_through_the_bridge() -> void:
 	check_equal(claude.kind, &"claude", "the other one stays Claude")
 	check_equal(agy.color, brain.AGY_COLOR, "the blue of agy")
 	check_near(agy.fullness, 0.5, 0.01, "against the context window of Gemini")
+	# The brain keeps every field it is told: none of an event may be named kind.
+	Events.post(&"session_tool_failed", {"session": "c6bdd622-affe", "tool": "run_command", "detail": "", "test": false, "agent": ""})
+	check_equal(agy.kind, &"agy", "stays agy after a failed command")
 	for address in ["agy:c6bdd622", "agy:General Discussion", "agy", "agy@work/agy"]:
 		check_equal(brain._session_named(address, "s1"), "c6bdd622-affe", address)
 	for address in ["claude:paros-35", "claude", "paros-35"]:

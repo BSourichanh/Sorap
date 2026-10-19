@@ -21,7 +21,7 @@ extends Node
 ##   session_subagents {count, agents: [{id, name, tool, detail}]}: the
 ##     running subagents (invoke_subagent), oldest first, each named after the
 ##     role it was given, with the tool it uses,
-##   session_tool_failed {tool, detail, kind, agent}: a command that exited
+##   session_tool_failed {tool, detail, test, agent}: a command that exited
 ##     with an error, or a tool that failed. agent: id of the subagent it
 ##     comes from, empty for the session,
 ##   session_turn {origin, from}: &"human", or &"peer" for a message of the
@@ -357,7 +357,7 @@ func _read_result(id: String, session: Dictionary, call: Dictionary, step: Dicti
 		"ERROR":
 			if session.known:
 				Events.post(&"session_tool_failed", {
-					"session": id, "tool": call.name, "detail": str(step.get("error", "")).left(120), "kind": "", "agent": "",
+					"session": id, "tool": call.name, "detail": str(step.get("error", "")).left(120), "test": false, "agent": "",
 				})
 			return
 	if call.name != COMMAND_TOOL:
@@ -369,7 +369,7 @@ func _read_result(id: String, session: Dictionary, call: Dictionary, step: Dicti
 	if code.get_string(1) != "0":
 		Events.post(&"session_tool_failed", {
 			"session": id, "tool": COMMAND_TOOL, "detail": str(call.args.get("toolSummary", command.left(120))),
-			"kind": "test" if test else "", "agent": "",
+			"test": test, "agent": "",
 		})
 	elif test:
 		Events.post(&"session_tests_passed", {"session": id})
@@ -444,7 +444,7 @@ func _read_subagent_step(id: String, agent: Dictionary, step: Dictionary) -> voi
 			var code := _exit_code.search(str(step.get("content", "")))
 			var failed: bool = step.get("status") == "ERROR" or (code != null and code.get_string(1) != "0")
 			if failed and agent.known:
-				Events.post(&"session_tool_failed", {"session": id, "tool": call.name, "detail": _detail(call.args), "kind": "", "agent": agent.id})
+				Events.post(&"session_tool_failed", {"session": id, "tool": call.name, "detail": _detail(call.args), "test": false, "agent": agent.id})
 
 
 ## The running subagents, oldest first, each {id, name, tool, detail}.

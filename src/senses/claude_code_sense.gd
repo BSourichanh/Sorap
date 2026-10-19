@@ -23,8 +23,9 @@ extends Node
 ##     the transcript once the answer is there. Only its terminal shows the
 ##     advisor at work: on Linux a helper reads it (linux/paros-terminal.py).
 ##     Without it, both come one after the other, after the fact,
-##   session_tool_failed {tool, detail, kind, agent: id of the subagent it
-##     comes from, empty for the session}, session_tests_passed,
+##   session_tool_failed {tool, detail, test: true for a test command, agent:
+##     id of the subagent it comes from, empty for the session},
+##   session_tests_passed,
 ##   session_message_sent {to}: the session wrote to the session of that name,
 ##     or to that address of the agent bridge (Diaulos), such as "agy:<id>",
 ##   session_mail {mail}: messages of other sessions that wait in its queue.
@@ -526,7 +527,7 @@ func _handle_hook(fields: PackedStringArray) -> void:
 				Events.post(&"session_tests_passed", {"session": id})
 		"PostToolUseFailure":
 			Events.post(&"session_tool_failed", {
-				"session": id, "tool": fields[Field.TOOL], "detail": fields[Field.DETAIL], "kind": fields[Field.KIND], "agent": agent,
+				"session": id, "tool": fields[Field.TOOL], "detail": fields[Field.DETAIL], "test": fields[Field.KIND] == "test", "agent": agent,
 			})
 		"SubagentStart", "SubagentStop":
 			# Claude Code also sends SubagentStop for agents it never announced,

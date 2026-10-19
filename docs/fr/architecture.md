@@ -139,7 +139,7 @@ Tous portent `session`, l'identifiant de la session.
 | `session_needs_you` | `detail` | Bulle |
 | `session_finished` | | Saut, bulle, son |
 | `session_tests_passed` | | Saut, bulle, son |
-| `session_tool_failed` | `tool`, `detail`, `kind`, `agent` | Tremblement, son. Dans un sous-agent : son petit personnage tremble, sans son |
+| `session_tool_failed` | `tool`, `detail`, `test`, `agent` | Tremblement, son. Dans un sous-agent : son petit personnage tremble, sans son |
 
 ### Sessions agy — `agy_sense.gd`
 

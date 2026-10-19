@@ -736,7 +736,7 @@ func test_agy_session_opens_works_then_closes() -> void:
 		call_step("run_command", {"CommandLine": "npm test", "toolSummary": "Run tests"}),
 		result_step("The command exited with code 1.\nOutput:\nfail"),
 	])
-	check_equal(last_event(&"session_tool_failed").get("kind"), "test", "red tests")
+	check_equal(last_event(&"session_tool_failed").get("test"), true, "red tests")
 	check_equal(last_event(&"session_tool_failed").get("detail"), "Run tests", "with the summary of the command")
 	add_steps(sense, [call_step("run_command", {"CommandLine": "npm test"}), result_step("The command exited with code 0.")])
 	check(&"session_tests_passed" in event_names(), "green tests")
