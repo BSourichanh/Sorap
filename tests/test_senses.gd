@@ -751,6 +751,32 @@ func test_agy_session_opens_works_then_closes() -> void:
 	sense.free()
 
 
+func test_agy_background_session_stays_alive_while_working() -> void:
+	if OS.get_name() != "Linux":
+		return
+	var sense := agy_sense()
+	add_steps(sense, [
+		{"type": "USER_INPUT", "content": "<USER_REQUEST>\nlong task\n</USER_REQUEST>"},
+		call_step("run_command", {"CommandLine": "sleep 10"}),
+	])
+	check_equal(last_event(&"session_phase").get("phase"), &"working", "working on the task")
+	# Simulate switching tabs: the process releases the fd of this conversation
+	OS.execute("rm", [folder.path_join("proc/4242/fd/75")])
+	sense._scan_in = 0.0
+	sense._poll()
+	check(&"session_closed" not in event_names(), "stays alive while working in background")
+	# The turn finishes in background
+	add_steps(sense, [
+		result_step("done"),
+		{"type": "PLANNER_RESPONSE", "content": "Done."},
+	])
+	check(&"session_finished" in event_names(), "finishes in background")
+	sense._scan_in = 0.0
+	sense._poll()
+	check(&"session_closed" in event_names(), "closes once idle and no longer held")
+	sense.free()
+
+
 func test_agy_background_tasks_letters_and_cancel() -> void:
 	if OS.get_name() != "Linux":
 		return
@@ -793,6 +819,31 @@ func test_agy_hook_script_writes_one_line() -> void:
 	OS.execute("sh", ["-c", "XDG_RUNTIME_DIR='%s' '%s' Stop < '%s'" % [folder, script, folder.path_join("input.json")]], output)
 	check_equal(output[0].strip_edges(), "{}", "answers with an empty object")
 	check_equal(FileAccess.get_file_as_string(folder.path_join("paros/agy-events.log")), "Stop\t%s\tUSER_CANCELED\n" % CONVERSATION, "one line")
+
+
+func test_agy_hook_rich_tool_events() -> void:
+	if OS.get_name() != "Linux":
+		return
+	var sense := agy_sense()
+	add_steps(sense, [
+		{"type": "USER_INPUT", "content": "<USER_REQUEST>\nwork\n</USER_REQUEST>"},
+	])
+	var log_path: String = sense._log_path
+	var log_file := FileAccess.open(log_path, FileAccess.WRITE)
+	log_file.store_line("PreToolUse\t%s\t\trun_command\tpytest -v\ttest\t\t" % CONVERSATION)
+	log_file.close()
+
+	sense._read_hook_log()
+	check_equal(last_event(&"session_activity"), {"session": CONVERSATION, "tool": "run_command", "detail": "pytest -v"}, "activity from hook")
+
+	log_file = FileAccess.open(log_path, FileAccess.READ_WRITE)
+	log_file.seek_end()
+	log_file.store_line("PostToolUse\t%s\t\trun_command\tpytest -v\ttest\t\t" % CONVERSATION)
+	log_file.close()
+
+	sense._read_hook_log()
+	check(&"session_tests_passed" in event_names(), "tests passed from hook")
+	sense.free()
 
 
 func test_agy_question_subagents_kill_timer_errors_and_checkpoint() -> void:
@@ -881,3 +932,62 @@ func test_agy_question_subagents_kill_timer_errors_and_checkpoint() -> void:
 	add_steps(sense, [{"type": "CHECKPOINT", "source": "SYSTEM", "content": "{{ CHECKPOINT 0 }} The earlier parts of this conversation have been truncated"}])
 	check_equal(last_event(&"session_compacting"), {"session": CONVERSATION, "compacting": false, "auto": true}, "the context was truncated")
 	sense.free()
+
+
+func test_antigravity_subagent_focus_not_main_session() -> void:
+	if OS.get_name() != "Linux":
+		return
+	var sense := agy_sense()
+	write(folder.path_join("proc/4242/comm"), "language_server\n")
+	write(folder.path_join("agy/annotations/%s.pbtxt" % CONVERSATION), 'title:"Parent Session"\n')
+	add_steps(sense, [
+		{"type": "USER_INPUT", "content": "<USER_REQUEST>\nParent work\n</USER_REQUEST>"},
+		{"type": "PLANNER_RESPONSE", "content": "Done."},
+	])
+	check_equal(last_event(&"session_opened").get("session"), CONVERSATION, "parent session opened")
+
+	# Subagent conversation
+	var subagent := "99999999-8888-7777-6666-555555555555"
+	var sub_path := folder.path_join("agy/brain/%s/.system_generated/logs/transcript_full.jsonl" % subagent)
+	write(sub_path, JSON.stringify({"type": "SYSTEM_MESSAGE", "source": "SYSTEM", "content": "[Message] timestamp=x sender=%s priority=HIGH content=task" % CONVERSATION}) + "\n")
+
+	# Focus switches to subagent conversation in language_server
+	write(folder.path_join("agy/presence/%s.lock" % subagent), "")
+	OS.execute("rm", [folder.path_join("proc/4242/fd/75")])
+	OS.execute("ln", ["-s", folder.path_join("agy/presence/%s.lock" % subagent), folder.path_join("proc/4242/fd/76")])
+	sense._scan_in = 0.0
+	sense._poll()
+
+	# Verify subagent is NOT opened as a main session
+	var opened_sessions: Array = _events.filter(func(e: Array) -> bool: return e[0] == &"session_opened").map(func(e: Array) -> Variant: return e[1].get("session"))
+	check(subagent not in opened_sessions, "subagent is never opened as a main session")
+	# And parent session stays alive because IDE is still running
+	check(&"session_closed" not in event_names(), "parent session remains alive while IDE runs")
+	sense.free()
+
+
+func test_antigravity_desktop_metadata_resolution() -> void:
+	if OS.get_name() != "Linux":
+		return
+	var sense := agy_sense()
+	write(folder.path_join("proc/4242/comm"), "language_server\n")
+	OS.execute("rm", [folder.path_join("proc/4242/cwd")])
+	OS.execute("ln", ["-s", Desktop.home(), folder.path_join("proc/4242/cwd")])
+
+	sense._desktop_meta = {
+		CONVERSATION: {
+			"title": "Clean Project Title",
+			"cwd": "/home/user/Projects/MyCustomApp",
+			"parent_id": "",
+			"not_idle": true,
+		}
+	}
+	add_steps(sense, [
+		{"type": "USER_INPUT", "content": "<USER_REQUEST>\nwork\n</USER_REQUEST>"},
+		{"type": "PLANNER_RESPONSE", "content": "Done."},
+	])
+	var opened := last_event(&"session_opened")
+	check_equal(opened.get("name"), "Clean Project Title", "title resolved from desktop metadata")
+	check_equal(opened.get("cwd"), "/home/user/Projects/MyCustomApp", "cwd resolved from desktop metadata instead of HOME")
+	sense.free()
+

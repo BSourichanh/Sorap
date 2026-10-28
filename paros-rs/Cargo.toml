@@ -1,0 +1,14 @@
+[package]
+name = "paros-rs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libc = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.154"
+smithay-client-toolkit = "0.21.1"
+tiny-skia = "0.12.0"
+wayland-client = "0.31.15"
+fastrand = "2.3"
+fontdue = "0.9.5"

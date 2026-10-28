@@ -556,7 +556,7 @@ func climb_onto(edge: Rect2) -> void:
 
 
 func grab() -> void:
-	_grab_offset = DisplayServer.mouse_get_position() - _window.position
+	_grab_offset = DisplayServer.mouse_get_position() - Vector2i(_window_pos)
 	_velocity = Vector2.ZERO
 	_perched = false
 	_enter(State.CARRIED)
@@ -705,7 +705,7 @@ func _screen_rect(screen: int) -> Rect2i:
 ## Is this screen point on the body? Where the click shape cannot be a polygon
 ## (see _hit_polygon), Pointer asks this to let the other clicks through.
 func hit_test(screen_point: Vector2) -> bool:
-	var local := (screen_point - Vector2(_window.position)) / _size
+	var local := (screen_point - _window_pos) / _size
 	return ((local - body_point(HIT_CENTER)) / (HIT_RADIUS * stature)).length_squared() <= 1.0
 
 

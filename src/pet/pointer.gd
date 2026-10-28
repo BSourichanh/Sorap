@@ -13,13 +13,13 @@ var _pressed_at := Vector2i.ZERO
 
 
 func _ready() -> void:
+	get_window().files_dropped.connect(func(files: PackedStringArray) -> void:
+		Events.post(&"files_dropped", {"pet": pet, "files": files}))
 	# Windows: the click shape is made by hand, see _process.
 	if OS.get_name() == "Windows":
 		return
 	get_window().mouse_entered.connect(_on_hover.bind(true))
 	get_window().mouse_exited.connect(_on_hover.bind(false))
-	get_window().files_dropped.connect(func(files: PackedStringArray) -> void:
-		Events.post(&"files_dropped", {"pet": pet, "files": files}))
 
 
 ## Windows only. A window region would cut the drawing, so the window takes

@@ -71,6 +71,23 @@ Sous Linux, pour voir le sage pendant que l'advisor travaille, il faut `python3-
 
 Pour lancer sans Godot, construire un binaire autonome avec `./build.sh` (voir [Développement](docs/fr/developpement.md#exporter-en-binaire)).
 
+### Mode natif Wayland (Hyprland) sans Godot (`paros-rs`)
+
+Paros intègre également un démon autonome natif en Rust pour Wayland Layer Shell (`paros-rs`), ne nécessitant aucune règle de fenêtre ni moteur de jeu :
+
+- **Ultra-léger** : Binaire dépouillé de 2,3 Mo, 72,3 Mo VmRSS (dont 48,6 Mo de tampons partagés `wl_shm`), 0% GPU (rendu vectoriel 100% logiciel CPU via Tiny-Skia).
+- **Architecture** : 40 modules rigoureusement sous le plafond strict (< 750 lignes), 0 avertissement Clippy, 177/177 tests validés (39 tests unitaires Rust + 138 tests Godot de référence).
+- **Fonctionnalités** : Traversée des clics transparente (`wl_region`), support multi-écrans natif, zéro vol de focus clavier (`KeyboardInteractivity::None`), cache de glyphes pré-rastérisés, parsing différentiel O(1) et éradication des processus zombies.
+- **Comparaison détaillée** : Voir la [matrice comparative d'architecture (`compatch.md`)](compatch.md) et le [guide Rust natif](docs/fr/paros-rs.md).
+
+```sh
+# Lancer le démon natif en arrière-plan
+./run-rs.sh -d
+
+# Arrêter
+./run-rs.sh -k
+```
+
 ## Gestes
 
 | Geste | Effet |
@@ -90,6 +107,10 @@ Pour lancer sans Godot, construire un binaire autonome avec `./build.sh` (voir [
 | [Claude Code](docs/fr/claude-code.md) | Ce que Paros lit des sessions, sous-agents, advisor, installation des hooks, confidentialité |
 | [agy](docs/fr/agy.md) | Sessions agy, lettres par Diaulos, hook facultatif, limites |
 | [Extension GNOME](docs/fr/extension-gnome.md) | Focus du terminal, perchoir, écran de verrouillage, plein écran |
+| [Hyprland](docs/fr/hyprland.md) | Règles de fenêtres, script auxiliaire et fonctionnalités sous Hyprland |
+| [Rust natif (`paros-rs`)](docs/fr/paros-rs.md) | Compagnon natif Wayland Layer Shell, configuration et exécution |
+| [Architecture Rust](docs/fr/architecture-rs.md) | Architecture modulaire multi-sessions Layer Shell, pipeline tiny-skia |
+| [Cycle de vie](docs/fr/cycle-de-vie.md) | Cycle de vie des mascottes, sous-agents, sage et lettres volantes |
 | [Architecture](docs/fr/architecture.md) | Organisation du code, référence des événements, comment ajouter un sens ou un comportement |
 | [Développement](docs/fr/developpement.md) | Tests, export en binaire, performances, limites connues, dépannage |
 
@@ -98,6 +119,7 @@ Pour lancer sans Godot, construire un binaire autonome avec `./build.sh` (voir [
 | | État |
 |---|---|
 | Linux, GNOME, Wayland | Testé |
+| Linux, Hyprland, Wayland | Testé (règles de fenêtres et script auxiliaire inclus) |
 | Linux, autre bureau | Le cœur fonctionne. Les parties propres à GNOME restent muettes |
 | agy | Linux seulement, la CLI agy. Testé avec agy (serveur de langage 1.4) |
 | Windows | Testé depuis les sources (Godot 4.7, Git Bash pour les hooks, `./test.ps1` pour les tests). Un script PowerShell (`windows/`) remplace l'extension GNOME : focus du terminal, perchoir, plein écran, inactivité, musique, batterie. Pas de pets sur l'écran de verrouillage, pas d'alerte de température. Le sage vient une fois la réponse de l'advisor arrivée, pas pendant l'appel |

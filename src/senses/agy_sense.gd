@@ -45,13 +45,13 @@ extends Node
 ## - ~/.agent-bridge/inbox/agy-<conversation id>/: messages of the agent bridge.
 
 ## Fields of a hook log line, separated by tabs.
-enum Field { EVENT, SESSION, REASON, COUNT }
+enum Field { EVENT, SESSION, NOTIFICATION, TOOL, DETAIL, KIND, AGENT, REASON, COUNT }
 
 const POLL_SECONDS := 0.5
 ## The processes are looked for less often: there are hundreds of them.
 const SCAN_SECONDS := 2.0
-## Name of the agy process in /proc/<pid>/comm.
-const PROCESS := "agy"
+## Process names recognized for Antigravity (CLI and IDE/language_server).
+const PROCESSES: Array[String] = ["agy", "language_server", "antigravity", "antigravity-ide"]
 const TRANSCRIPT := ".system_generated/logs/transcript_full.jsonl"
 ## A Stop of a turn that ended normally: its last answer told it already.
 const NORMAL_END := "NO_TOOL_CALL"
@@ -90,6 +90,9 @@ var _proc_dir := "/proc"
 var _log_path := ""
 var _log_offset := 0
 var _scan_in := 0.0
+var _db_helper_script := "res://linux/paros-antigravity-db.py"
+var _desktop_meta := {}
+var _last_db_mtime := 0
 ## Conversation id -> {pid, cwd}, as of the last scan.
 var _live := {}
 ## Conversation id -> the SHOWN fields, plus working (true from the start of a
@@ -110,6 +113,7 @@ var _subagent_id := RegEx.create_from_string('"conversationId":\\s*"([^"]+)"')
 var _bridge_send := RegEx.create_from_string("bridge\\.py\"?\\s+send\\s+\"?([^\\s\"]+)")
 var _sender := RegEx.create_from_string('<bridge-message [^>]*from="([^"]+)"')
 var _request := RegEx.create_from_string("(?s)<USER_REQUEST>\\s*(.*?)\\s*</USER_REQUEST>")
+var _canceled_subagent := RegEx.create_from_string('Subagent "([^"]+)" has been explicitly canceled')
 var _title := RegEx.create_from_string('title:\\s*"((?:[^"\\\\]|\\\\.)*)"')
 
 
@@ -131,6 +135,7 @@ func _poll() -> void:
 	_scan_in -= POLL_SECONDS
 	if _scan_in <= 0.0:
 		_scan_in = SCAN_SECONDS
+		_sync_desktop_meta()
 		_live = _read_processes()
 		for id: String in _sessions.keys():
 			if not _live.has(id):
@@ -144,26 +149,154 @@ func _poll() -> void:
 		_update_phase(id)
 
 
-## Conversation id -> {pid, cwd}, for each running agy process.
+func _sync_desktop_meta() -> void:
+	var db_path := ""
+	for dir in _candidate_dirs():
+		var p := dir.path_join("conversation_summaries.db")
+		if FileAccess.file_exists(p):
+			db_path = p
+			break
+	if db_path.is_empty():
+		return
+	var wal_path := db_path + "-wal"
+	var mtime := FileAccess.get_modified_time(db_path)
+	if FileAccess.file_exists(wal_path):
+		mtime = max(mtime, FileAccess.get_modified_time(wal_path))
+	if mtime == _last_db_mtime:
+		return
+	_last_db_mtime = mtime
+
+	var script_path := ProjectSettings.globalize_path(_db_helper_script)
+	if not FileAccess.file_exists(script_path):
+		script_path = Desktop.home().path_join("Documents/Paros/linux/paros-antigravity-db.py")
+	if not FileAccess.file_exists(script_path):
+		return
+
+	var output: Array = []
+	var err := OS.execute("python3", ["-I", script_path, "--db", db_path], output)
+	if err == 0 and not output.is_empty():
+		var json: Variant = JSON.parse_string(output[0])
+		if json is Dictionary:
+			_desktop_meta = json
+
+
+func _candidate_dirs() -> Array[String]:
+	var dirs: Array[String] = []
+	if not _agy_dir.is_empty():
+		dirs.append(_agy_dir)
+	if _proc_dir == "/proc":
+		var antigravity_ide := Desktop.home().path_join(".gemini/antigravity")
+		if not dirs.has(antigravity_ide):
+			dirs.append(antigravity_ide)
+		var snap_cli := Desktop.home().path_join("snap/antigravity-cli/common/.gemini/antigravity-cli")
+		if not dirs.has(snap_cli):
+			dirs.append(snap_cli)
+	return dirs
+
+
+func _is_subagent(id: String, data_dir: String) -> bool:
+	if _desktop_meta.has(id):
+		return not str(_desktop_meta[id].get("parent_id", "")).is_empty()
+	for session: Dictionary in _sessions.values():
+		if session.get("subagents", {}).has(id):
+			return true
+	if FileAccess.file_exists(data_dir.path_join("annotations/%s.pbtxt" % id)):
+		return false
+	for cand in _candidate_dirs():
+		if FileAccess.file_exists(cand.path_join("annotations/%s.pbtxt" % id)):
+			return false
+	var log_dir := data_dir.path_join("brain").path_join(id).path_join(".system_generated/logs")
+	var tpath := log_dir.path_join("transcript.jsonl")
+	if not FileAccess.file_exists(tpath):
+		tpath = log_dir.path_join("transcript_full.jsonl")
+	if FileAccess.file_exists(tpath):
+		var f := FileAccess.open(tpath, FileAccess.READ)
+		if f:
+			var first_line := f.get_line()
+			if (first_line.contains("[Message]") and first_line.contains("sender=")) \
+				or (first_line.contains('"source":"SYSTEM"') and not first_line.contains("<USER_REQUEST>")):
+				return true
+			if first_line.contains("<USER_REQUEST>") or first_line.contains('"type":"USER_INPUT"'):
+				return false
+	return false
+
+
+## Conversation id -> {pid, cwd, data_dir, is_ide}, for each running agy process.
 func _read_processes() -> Dictionary:
 	var live := {}
 	if not DirAccess.dir_exists_absolute(_proc_dir):
 		return live
-	var presence := _agy_dir.path_join("presence")
+	var candidate_dirs := _candidate_dirs()
+	var presences: Array[String] = []
+	for dir in candidate_dirs:
+		presences.append(dir.path_join("presence"))
+	var running_pids := {}
+	var ide_running := false
+	var ide_pid := -1
 	for pid in DirAccess.get_directories_at(_proc_dir):
 		if not pid.is_valid_int():
 			continue
 		var folder := _proc_dir.path_join(pid)
-		if Desktop.read_kernel_file(folder.path_join("comm")).strip_edges() != PROCESS:
+		var comm := Desktop.read_kernel_file(folder.path_join("comm")).strip_edges()
+		if comm not in PROCESSES:
 			continue
+		var ipid := pid.to_int()
+		running_pids[ipid] = true
+		if comm in ["language_server", "antigravity", "antigravity-ide"]:
+			ide_running = true
+			ide_pid = ipid
 		var fds := DirAccess.open(folder.path_join("fd"))
 		if fds == null:
 			continue
 		for fd in fds.get_files():
 			var target := fds.read_link(fd)
-			if target.get_base_dir() == presence and target.get_extension() == "lock":
+			var base := target.get_base_dir()
+			var idx := presences.find(base)
+			if idx != -1 and target.get_extension() == "lock":
+				var conv_id := target.get_file().get_basename()
+				if _is_subagent(conv_id, candidate_dirs[idx]):
+					continue
 				var cwd := DirAccess.open(folder)
-				live[target.get_file().get_basename()] = {"pid": pid.to_int(), "cwd": cwd.read_link("cwd") if cwd else ""}
+				var session_cwd: String = cwd.read_link("cwd") if cwd else ""
+				if _desktop_meta.has(conv_id) and not str(_desktop_meta[conv_id].get("cwd", "")).is_empty():
+					session_cwd = str(_desktop_meta[conv_id].get("cwd"))
+				live[conv_id] = {
+					"pid": ipid,
+					"cwd": session_cwd,
+					"data_dir": candidate_dirs[idx],
+					"is_ide": comm != "agy",
+				}
+	# Also pick up running background conversations from Desktop SQLite
+	if ide_running and ide_pid > 0:
+		for cid: String in _desktop_meta:
+			var active_dir := ""
+			for dir in candidate_dirs:
+				if DirAccess.dir_exists_absolute(dir.path_join("brain").path_join(cid)):
+					active_dir = dir
+					break
+			if not active_dir.is_empty() and not live.has(cid) and _desktop_meta[cid].get("not_idle", false) and str(_desktop_meta[cid].get("parent_id", "")).is_empty():
+				live[cid] = {
+					"pid": ide_pid,
+					"cwd": str(_desktop_meta[cid].get("cwd", "")),
+					"data_dir": active_dir,
+					"is_ide": true,
+				}
+	# Keep working background sessions alive, and keep open IDE sessions alive while IDE runs.
+	for id: String in _sessions:
+		if live.has(id):
+			continue
+		var session: Dictionary = _sessions[id]
+		var subagents_running: bool = not _running(session).is_empty()
+		var is_ide_session: bool = session.get("is_ide", false) or (ide_running and session.pid == ide_pid)
+		var is_db_running: bool = _desktop_meta.get(id, {}).get("not_idle", false)
+		var keep_ide_alive: bool = is_ide_session and ide_running and (Time.get_unix_time_from_system() - session.get("last_step", 0.0) < 3600.0)
+		if (session.working or subagents_running or is_db_running or keep_ide_alive) and (session.pid in running_pids or Desktop.is_process_running(session.pid)):
+			live[id] = {
+				"pid": session.pid,
+				"cwd": session.cwd,
+				"data_dir": session.data_dir,
+				"is_ide": is_ide_session,
+			}
 	return live
 
 
@@ -174,13 +307,16 @@ func _update(id: String, process: Dictionary) -> void:
 			"name": "", "color": "", "cwd": "", "last_prompt": "", "pid": 0, "context": 0, "summary": "", "kind": &"agy",
 			"working": false, "phase": &"", "transcript_offset": 0, "known": false, "calls": [], "tasks": {}, "subagents": {},
 			"background": 0, "servers": 0, "mail": 0, "heard": _now(), "quiet": 0, "origin": &"", "asker": "", "last_step": 0.0,
+			"data_dir": "", "is_ide": false,
 		}
 	var session: Dictionary = _sessions[id]
 	var before := _shown(session)
 	session.pid = process.pid
 	session.cwd = process.cwd
+	session.data_dir = process.get("data_dir", _agy_dir)
+	session.is_ide = process.get("is_ide", session.get("is_ide", false))
 	if _scan_in == SCAN_SECONDS or opened:
-		session.name = _read_title(id)
+		session.name = _read_title(id, session)
 		if session.name in ["", UNTITLED]:
 			session.name = session.cwd.get_file()
 	_read_transcript(id, session)
@@ -213,8 +349,11 @@ func _shown(session: Dictionary) -> Dictionary:
 
 ## Title of the conversation. agy writes it as text protobuf, with C escapes
 ## for quotes and for the bytes of the letters that are not ASCII.
-func _read_title(id: String) -> String:
-	var found := _title.search(FileAccess.get_file_as_string(_agy_dir.path_join("annotations/%s.pbtxt" % id)))
+func _read_title(id: String, session: Dictionary = {}) -> String:
+	if _desktop_meta.has(id) and not str(_desktop_meta[id].get("title", "")).is_empty():
+		return str(_desktop_meta[id].get("title"))
+	var base_dir: String = session.get("data_dir", _agy_dir) if not session.is_empty() else _agy_dir
+	var found := _title.search(FileAccess.get_file_as_string(base_dir.path_join("annotations/%s.pbtxt" % id)))
 	if found == null:
 		return ""
 	var text := found.get_string(1)
@@ -244,7 +383,8 @@ func _octal(digits: String) -> int:
 
 ## Reads only what was added to the transcript since the last call.
 func _read_transcript(id: String, session: Dictionary) -> void:
-	var file := FileAccess.open(_agy_dir.path_join("brain").path_join(id).path_join(TRANSCRIPT), FileAccess.READ)
+	var base_dir: String = session.get("data_dir", _agy_dir)
+	var file := FileAccess.open(base_dir.path_join("brain").path_join(id).path_join(TRANSCRIPT), FileAccess.READ)
 	if file == null:
 		return
 	file.seek(session.transcript_offset)
@@ -276,6 +416,11 @@ func _read_step(id: String, session: Dictionary, step: Dictionary) -> void:
 				session.asker = ""
 				var request := _request.search(content)
 				session.last_prompt = request.get_string(1) if request else content
+				if session.cwd == Desktop.home() or session.cwd.is_empty():
+					var ws_regex := RegEx.create_from_string("Active Workspaces:\\s*\\n\\s*-\\s*([^\\n]+)")
+					var ws_match := ws_regex.search(content)
+					if ws_match:
+						session.cwd = ws_match.get_string(1).strip_edges()
 			if session.known:
 				_post_turn(id, session)
 		"PLANNER_RESPONSE":
@@ -309,6 +454,11 @@ func _read_step(id: String, session: Dictionary, step: Dictionary) -> void:
 		"SYSTEM_MESSAGE":
 			# The end of a background task or of a timer, the report of a
 			# subagent: agy hands it to the model, a new turn of work.
+			var canceled := _canceled_subagent.search(content)
+			if canceled:
+				var cid := canceled.get_string(1)
+				if session.subagents.has(cid):
+					session.subagents[cid].running = false
 			var sender := _message_sender.search(content)
 			if sender and step.get("source") == "SYSTEM":
 				session.tasks.erase(sender.get_string(1))
@@ -392,9 +542,15 @@ func _add_subagents(session: Dictionary, args: Dictionary, content: String) -> v
 ## Reads what was added to the transcript of each subagent, and posts the
 ## running ones when they changed.
 func _read_subagents(id: String, session: Dictionary) -> void:
+	var base_dir: String = session.get("data_dir", _agy_dir)
 	var before := _running(session)
 	for agent: Dictionary in session.subagents.values():
-		var file := FileAccess.open(_agy_dir.path_join("brain").path_join(agent.id).path_join(TRANSCRIPT), FileAccess.READ)
+		var transcript_path := base_dir.path_join("brain").path_join(agent.id).path_join(TRANSCRIPT)
+		if agent.running and FileAccess.file_exists(transcript_path):
+			var mtime := FileAccess.get_modified_time(transcript_path)
+			if Time.get_unix_time_from_system() - mtime > 60.0:
+				agent.running = false
+		var file := FileAccess.open(transcript_path, FileAccess.READ)
 		if file == null:
 			continue
 		file.seek(agent.offset)
@@ -468,14 +624,83 @@ func _read_hook_log() -> void:
 		_log_offset = 0
 	file.seek(_log_offset)
 	while file.get_position() < file.get_length():
-		var fields := file.get_line().split("\t")
-		if fields.size() == Field.COUNT and _sessions.has(fields[Field.SESSION]):
-			var session: Dictionary = _sessions[fields[Field.SESSION]]
+		var line := file.get_line()
+		if line.is_empty():
+			continue
+		var fields := line.split("\t")
+		if fields.size() < 3:
+			continue
+		var event := fields[0]
+		var conv_id := fields[1]
+
+		var session: Dictionary = _sessions.get(conv_id, {})
+		var subagent_parent_id := ""
+		if session.is_empty():
+			for sid: String in _sessions:
+				if _sessions[sid].subagents.has(conv_id):
+					subagent_parent_id = sid
+					break
+
+		if session.is_empty() and subagent_parent_id.is_empty():
+			continue
+
+		if not session.is_empty():
 			session.heard = _now()
-			# Cancelled, or an error: the turn ends with no last answer.
-			if fields[Field.EVENT] == "Stop" and fields[Field.REASON] != NORMAL_END:
+		else:
+			_sessions[subagent_parent_id].heard = _now()
+
+		if fields.size() >= 7:
+			var notif := fields[2]
+			var tool := fields[3]
+			var detail := fields[4]
+			var kind := fields[5]
+			var agent_id := fields[6]
+			var reason := fields[7] if fields.size() > 7 else ""
+
+			match event:
+				"PreToolUse":
+					if not session.is_empty():
+						session.working = true
+						if tool == QUESTION_TOOL:
+							session.calls.append({"name": tool, "args": {}})
+							Events.post(&"session_needs_you", {"session": conv_id, "detail": detail})
+						else:
+							Events.post(&"session_activity", {"session": conv_id, "tool": tool, "detail": detail})
+						_update_phase(conv_id)
+					elif not subagent_parent_id.is_empty():
+						var p_sess: Dictionary = _sessions[subagent_parent_id]
+						var agent_entry: Dictionary = p_sess.subagents[conv_id]
+						agent_entry.tool = tool
+						agent_entry.detail = detail
+						agent_entry.running = true
+						Events.post(&"session_subagents", {"session": subagent_parent_id, "subagents": _running(p_sess)})
+				"PostToolUse":
+					if not session.is_empty():
+						if kind == "test" and notif.is_empty():
+							Events.post(&"session_tests_passed", {"session": conv_id})
+						elif not notif.is_empty():
+							Events.post(&"session_tool_failed", {
+								"session": conv_id, "tool": tool, "detail": detail, "test": kind == "test", "agent": "",
+							})
+					elif not subagent_parent_id.is_empty():
+						if not notif.is_empty():
+							Events.post(&"session_tool_failed", {
+								"session": subagent_parent_id, "tool": tool, "detail": detail, "test": false, "agent": conv_id,
+							})
+				"Stop":
+					if not session.is_empty():
+						session.working = false
+						session.calls.clear()
+						if reason != NORMAL_END:
+							_update_phase(conv_id)
+						else:
+							Events.post(&"session_finished", {"session": conv_id})
+		else:
+			var reason := fields[2]
+			if event == "Stop" and not session.is_empty() and reason != NORMAL_END:
 				session.working = false
 				session.calls.clear()
+				_update_phase(conv_id)
 	_log_offset = file.get_position()
 
 

@@ -71,6 +71,23 @@ On Linux, to see the sage while the advisor works, `python3-gi` is needed (prese
 
 To run without Godot, build a standalone binary with `./build.sh` (see [Development](docs/en/development.md#exporting-a-binary)).
 
+### Native Wayland (Hyprland) without Godot (`paros-rs`)
+
+Paros also provides a standalone native Rust engine optimized for Wayland Layer Shell (`paros-rs`), requiring zero window rules and zero game engine runtime:
+
+- **Ultra-lightweight**: 2.3 MB stripped binary, 72.3 MB VmRSS (including 48.6 MB shared `wl_shm` buffers), 0% GPU usage (100% CPU vector rendering via Tiny-Skia).
+- **Architecture**: 40 modular files (< 750 lines each), 0 Clippy warnings, 177/177 passing tests (39 Rust unit tests + 138 Godot reference tests).
+- **Features**: Transparent mouse passthrough (`wl_region`), multi-monitor support, zero focus stealing (`KeyboardInteractivity::None`), glyph pre-rasterization cache, differential O(1) session parsing, and process zombie eradication.
+- **Detailed comparison**: See [Compatibility & Architecture Matrix (`compatch.md`)](compatch.md) and the [Native Rust Guide](docs/en/paros-rs.md).
+
+```sh
+# Launch native daemon in background
+./run-rs.sh -d
+
+# Stop
+./run-rs.sh -k
+```
+
 ## Controls
 
 | Gesture | Effect |
@@ -90,6 +107,10 @@ To run without Godot, build a standalone binary with `./build.sh` (see [Developm
 | [Claude Code](docs/en/claude-code.md) | What Paros reads from the sessions, subagents, advisor, hook setup, privacy |
 | [agy](docs/en/agy.md) | agy sessions, letters through Diaulos, the optional hook, limits |
 | [GNOME extension](docs/en/gnome-extension.md) | Terminal focus, perch, lock screen, full screen |
+| [Hyprland](docs/en/hyprland.md) | Window rules, helper script and features on Hyprland |
+| [Native Rust (`paros-rs`)](docs/en/paros-rs.md) | Standalone Wayland Layer Shell companion, configuration and usage |
+| [Rust Architecture](docs/en/architecture-rs.md) | Multi-session Layer Shell architecture, tiny-skia rendering pipeline |
+| [Lifecycle](docs/en/lifecycle.md) | Lifecycle and state machines for pets, subagents, sage, and flying letters |
 | [Architecture](docs/en/architecture.md) | Code layout, event reference, how to add a sense or a behavior |
 | [Development](docs/en/development.md) | Tests, binary export, performance, known limits, troubleshooting |
 
@@ -98,6 +119,7 @@ To run without Godot, build a standalone binary with `./build.sh` (see [Developm
 | | Status |
 |---|---|
 | Linux, GNOME, Wayland | Tested |
+| Linux, Hyprland, Wayland | Tested (window rules and helper script included) |
 | Linux, other desktops | The core works. GNOME-only parts stay silent |
 | agy | Linux only, the agy CLI. Tested with agy (language server 1.4) |
 | Windows | Tested from the sources (Godot 4.7, Git Bash for the hooks, `./test.ps1` for the tests). A PowerShell helper (`windows/`) replaces the GNOME extension: terminal focus, perch, full screen, inactivity, music, battery. No pets on the lock screen, no temperature alert. The sage comes once the answer of the advisor is there, not during the call |

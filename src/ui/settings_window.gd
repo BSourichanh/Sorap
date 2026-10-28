@@ -75,8 +75,17 @@ func _ready() -> void:
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vbox.add_theme_constant_override("separation", 0)
+	panel.add_child(vbox)
+
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	panel.add_child(_scroll)
+	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_child(_scroll)
+
 	for side: String in ["left", "top", "right", "bottom"]:
 		_content.add_theme_constant_override("margin_" + side, MARGIN)
 	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -96,6 +105,26 @@ func _ready() -> void:
 		_autostart.toggled.connect(Autostart.set_enabled)
 		_add_row(grid, "Start at login", _autostart)
 
+	var bottom_margin := MarginContainer.new()
+	bottom_margin.add_theme_constant_override("margin_left", MARGIN)
+	bottom_margin.add_theme_constant_override("margin_right", MARGIN)
+	bottom_margin.add_theme_constant_override("margin_bottom", MARGIN)
+	bottom_margin.add_theme_constant_override("margin_top", MARGIN / 2)
+	vbox.add_child(bottom_margin)
+
+	var close_btn := Button.new()
+	close_btn.text = tr("Close")
+	close_btn.size_flags_horizontal = Control.SIZE_SHRINK_END
+	close_btn.custom_minimum_size = Vector2(90, 30)
+	close_btn.pressed.connect(hide)
+	bottom_margin.add_child(close_btn)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if visible and event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		hide()
+		get_viewport().set_input_as_handled()
+
 
 func _on_sensed(event: StringName, _data: Dictionary) -> void:
 	if event == &"settings_requested":
@@ -110,6 +139,7 @@ func _on_sensed(event: StringName, _data: Dictionary) -> void:
 ## the window widens by the scroll bar.
 func _fit_screen() -> void:
 	var wanted := _content.get_combined_minimum_size()
+	wanted.y += MARGIN + 40.0
 	var screen := DisplayServer.screen_get_usable_rect(DisplayServer.SCREEN_WITH_MOUSE_FOCUS)
 	var tallest := screen.size.y * MAX_SCREEN_SHARE
 	if wanted.y > tallest:

@@ -2,7 +2,13 @@
 
 [Français](../fr/architecture.md)
 
-## Principle
+Paros features two complementary execution engines:
+1. **Godot 4.7 Engine (GDScript)**: Modular event-bus architecture, described below.
+2. **Native Rust Engine (`paros-rs`)**: Optimized for Wayland Layer Shell, detailed in [Rust Architecture](architecture-rs.md).
+
+For entity states, subagents, sage, and flying letters, see [Lifecycle](lifecycle.md).
+
+## Principle (Godot Engine)
 
 ```
 senses ──post──▶ Events ──listened by──▶ brain ──orders──▶ pets ──read by──▶ body

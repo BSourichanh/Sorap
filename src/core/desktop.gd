@@ -6,6 +6,7 @@ class_name Desktop
 
 const HELPER_SCRIPT := "res://windows/paros-desktop.ps1"
 const TERMINAL_SCRIPT := "res://linux/paros-terminal.py"
+const HYPRLAND_SCRIPT := "res://linux/paros-hyprland.py"
 const TERMINAL_RETRY_SECONDS := 60.0
 ## The helper rewrites its files more often than this. Older: it is gone.
 const STALE_SECONDS := 30.0
@@ -37,25 +38,51 @@ static func home() -> String:
 	return OS.get_environment("USERPROFILE" if OS.get_name() == "Windows" else "HOME")
 
 
-## Windows: starts the helper that tells the desktop (focused window, idle time,
-## media, battery) and does what Windows allows only from inside (raising a
-## terminal). It ends when this app ends.
+## True when running on Linux under Hyprland.
+static func is_hyprland() -> bool:
+	return OS.get_name() == "Linux" and (
+		OS.has_environment("HYPRLAND_INSTANCE_SIGNATURE") or
+		OS.get_environment("XDG_CURRENT_DESKTOP") == "Hyprland"
+	)
+
+
+## Starts the helper that tells the desktop (focused window, idle time,
+## media, battery) and does what the system allows only from inside (raising a
+## terminal). Windows: PowerShell helper. Linux (Hyprland): Python helper.
+## It ends when this app ends.
 static func start_helper() -> void:
-	if OS.get_name() != "Windows" or _is_headless():
+	if _is_headless():
 		return
-	var folder := runtime_dir().path_join("paros")
-	DirAccess.make_dir_recursive_absolute(folder.path_join("requests"))
-	# The script lives in the project, or in the exported package: a program cannot run it from there.
-	var script := folder.path_join("paros-desktop.ps1")
-	var file := FileAccess.open(script, FileAccess.WRITE)
-	if file == null:
-		return
-	file.store_string(FileAccess.get_file_as_string(HELPER_SCRIPT))
-	file.close()
-	start("powershell.exe", [
-		"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script,
-		"-ParentPid", str(OS.get_process_id()), "-Dir", folder,
-	])
+	if OS.get_name() == "Windows":
+		var folder := runtime_dir().path_join("paros")
+		DirAccess.make_dir_recursive_absolute(folder.path_join("requests"))
+		# The script lives in the project, or in the exported package: a program cannot run it from there.
+		var script := folder.path_join("paros-desktop.ps1")
+		var file := FileAccess.open(script, FileAccess.WRITE)
+		if file == null:
+			return
+		file.store_string(FileAccess.get_file_as_string(HELPER_SCRIPT))
+		file.close()
+		start("powershell.exe", [
+			"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script,
+			"-ParentPid", str(OS.get_process_id()), "-Dir", folder,
+		])
+	elif is_hyprland():
+		var folder := runtime_dir().path_join("paros")
+		var desktop_json := folder.path_join("desktop.json")
+		if FileAccess.file_exists(desktop_json) and Time.get_unix_time_from_system() - FileAccess.get_modified_time(desktop_json) < 5.0:
+			return
+		DirAccess.make_dir_recursive_absolute(folder)
+		var script := folder.path_join("paros-hyprland.py")
+		var file := FileAccess.open(script, FileAccess.WRITE)
+		if file == null:
+			return
+		file.store_string(FileAccess.get_file_as_string(HYPRLAND_SCRIPT))
+		file.close()
+		start("python3", [
+			"-I", script,
+			"--parent", str(OS.get_process_id()),
+		])
 
 
 ## File where the helper that reads the terminals tells which ones show the
@@ -168,9 +195,12 @@ static func start(program: String, arguments: PackedStringArray) -> void:
 
 
 ## Turns the monitors on, or off (power saving). GNOME turns them off as soon
-## as the screen is locked: this is how to get them back.
+## as the screen is locked: this is how to get them back. Under Hyprland, uses hyprctl dispatch dpms.
 static func set_screen_power(on: bool) -> void:
 	if _is_headless():
+		return
+	if is_hyprland():
+		start("hyprctl", ["dispatch", "dpms", "on" if on else "off"])
 		return
 	start("gdbus", [
 		"call", "--session", "--dest", "org.gnome.Mutter.DisplayConfig", "--object-path", "/org/gnome/Mutter/DisplayConfig",

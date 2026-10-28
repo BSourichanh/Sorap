@@ -32,7 +32,7 @@ func _exit_tree() -> void:
 
 # The query runs in a thread: OS.execute blocks, and a blocked frame freezes the pet.
 func _poll() -> void:
-	if OS.get_name() == "Windows":
+	if OS.get_name() == "Windows" or Desktop.is_hyprland():
 		# The desktop helper reads the time since the last input.
 		var state := Desktop.windows_state()
 		if state.has("idle_ms"):

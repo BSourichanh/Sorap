@@ -2,7 +2,13 @@
 
 [English](../en/architecture.md)
 
-## Principe
+Paros dispose de deux moteurs d'exécution complémentaires :
+1. **Moteur Godot 4.7 (GDScript)** : Architecture modulaire basée sur un bus d'événements, décrite ci-dessous.
+2. **Moteur natif Rust (`paros-rs`)** : Architecture optimisée pour Wayland Layer Shell, détaillée dans [Architecture Rust](architecture-rs.md).
+
+Pour les détails sur les mascottes, sous-agents, sage et lettres, voir [Cycle de vie](cycle-de-vie.md).
+
+## Principe (Moteur Godot)
 
 ```
 sens ──poste──▶ Events ──écoute──▶ cerveau ──commande──▶ personnages ──lus par──▶ corps

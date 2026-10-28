@@ -47,6 +47,7 @@ const FRENCH := {
 	"Stop the focus (%d min left)": "Arrêter le focus (reste %d min)",
 	"Stop the break (%d min left)": "Arrêter la pause (reste %d min)",
 	"Settings…": "Réglages…",
+	"Close": "Fermer",
 	"Quit": "Quitter",
 	"Paros — Settings": "Paros — Réglages",
 	"Pet": "Personnage",
