@@ -50,7 +50,7 @@ impl MonitorSurface {
             qh,
             surface,
             Layer::Overlay,
-            Some("paros-rs"),
+            Some("sorap"),
             Some(&output),
         );
 

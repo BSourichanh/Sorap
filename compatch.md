@@ -188,18 +188,20 @@ FLUX DE RENDU RUST / HYPRLAND (Zéro GPU, Zéro Allocation 60 FPS) :
 | **Passe de rendu & Compositing** | `src/main.gd` (Draw calls) | [`src/app/render_pass.rs`](file:///home/user/Documents/Paros/paros-rs/src/app/render_pass.rs), [`src/render/mod.rs`](file:///home/user/Documents/Paros/paros-rs/src/render/mod.rs) |
 | **Dessin Mascotte Claude** | `src/render/claude_body.gd` | [`src/render/claude_body.rs`](file:///home/user/Documents/Paros/paros-rs/src/render/claude_body.rs) |
 | **Dessin Mascotte Antigravity** | `src/render/agy_body.gd` | [`src/render/agy_body.rs`](file:///home/user/Documents/Paros/paros-rs/src/render/agy_body.rs) |
-| **Postures & Membres** | `src/render/postures.gd` | [`src/render/postures.rs`](file:///home/user/Documents/Paros/paros-rs/src/render/postures.rs) |
+| **Composition du Rendu Pet** | `src/pet/pet_body.gd` | [`src/render/draw_pet.rs`](file:///home/user/Documents/Paros/paros-rs/src/render/draw_pet.rs) |
+| **Surfaces & Particules** | `src/render/postures.gd` | [`src/render/postures.rs`](file:///home/user/Documents/Paros/paros-rs/src/render/postures.rs), [`src/render/particles.rs`](file:///home/user/Documents/Paros/paros-rs/src/render/particles.rs), [`src/render/overlays.rs`](file:///home/user/Documents/Paros/paros-rs/src/render/overlays.rs) |
 | **Accessoires (chapeau, valise...)** | `src/render/accessories.gd` | [`src/render/accessories.rs`](file:///home/user/Documents/Paros/paros-rs/src/render/accessories.rs) |
 | **Bulles & Cartes de survol** | `src/ui/bubble.gd`, `src/ui/hover_card.gd` | [`src/render/text.rs`](file:///home/user/Documents/Paros/paros-rs/src/render/text.rs), [`src/card.rs`](file:///home/user/Documents/Paros/paros-rs/src/card.rs) |
-| **Modèle Mascotte & États** | `src/pet/pet.gd`, `src/pet/types.gd` | [`src/pet/mod.rs`](file:///home/user/Documents/Paros/paros-rs/src/pet/mod.rs), [`src/pet/types.rs`](file:///home/user/Documents/Paros/paros-rs/src/pet/types.rs) |
-| **Cinématique & Gravité** | `src/pet/pet.gd` (_physics_process) | [`src/pet/physics.rs`](file:///home/user/Documents/Paros/paros-rs/src/pet/physics.rs) |
+| **Modèle Mascotte & États** | `src/pet/pet.gd`, `src/pet/types.gd` | [`src/pet/mod.rs`](file:///home/user/Documents/Paros/paros-rs/src/pet/mod.rs), [`src/pet/behavior.rs`](file:///home/user/Documents/Paros/paros-rs/src/pet/behavior.rs), [`src/pet/types.rs`](file:///home/user/Documents/Paros/paros-rs/src/pet/types.rs) |
+| **Cinématique & Mouvement** | `src/pet/pet.gd` (_physics_process) | [`src/pet/physics.rs`](file:///home/user/Documents/Paros/paros-rs/src/pet/physics.rs), [`src/pet/motion.rs`](file:///home/user/Documents/Paros/paros-rs/src/pet/motion.rs) |
 | **Interactions & Commandes** | `src/pet/pet.gd` (API publique) | [`src/pet/interact.rs`](file:///home/user/Documents/Paros/paros-rs/src/pet/interact.rs) |
 | **Social, Visites & Célébrations**| `src/brain/small_pets.gd`, `src/brain/pets.gd` | [`src/app/social.rs`](file:///home/user/Documents/Paros/paros-rs/src/app/social.rs) |
 | **Pyramides & Tours de repos**| `src/brain/small_pets.gd` | [`src/app/social_pyramids.rs`](file:///home/user/Documents/Paros/paros-rs/src/app/social_pyramids.rs) |
-| **Cycle de vie des Sessions** | `src/brain/brain.gd` | [`src/app/sessions.rs`](file:///home/user/Documents/Paros/paros-rs/src/app/sessions.rs), [`src/app/state.rs`](file:///home/user/Documents/Paros/paros-rs/src/app/state.rs) |
+| **Cycle de vie des Sessions** | `src/brain/brain.gd` | [`src/app/sessions.rs`](file:///home/user/Documents/Paros/paros-rs/src/app/sessions.rs), [`src/app/session_sync.rs`](file:///home/user/Documents/Paros/paros-rs/src/app/session_sync.rs), [`src/app/state.rs`](file:///home/user/Documents/Paros/paros-rs/src/app/state.rs) |
+| **Résolution & Espacement** | `src/brain/brain.gd` | [`src/app/state_spread.rs`](file:///home/user/Documents/Paros/paros-rs/src/app/state_spread.rs), [`src/app/state_resolve.rs`](file:///home/user/Documents/Paros/paros-rs/src/app/state_resolve.rs) |
 | **Compactage & Knocks** | `src/brain/brain.gd` | [`src/app/compacting.rs`](file:///home/user/Documents/Paros/paros-rs/src/app/compacting.rs) |
-| **Surveillance Claude Code** | `src/senses/claude_code_sense.gd` | [`src/session/claude.rs`](file:///home/user/Documents/Paros/paros-rs/src/session/claude.rs) |
-| **Surveillance Antigravity** | `src/senses/agy_sense.gd` | [`src/session/agy.rs`](file:///home/user/Documents/Paros/paros-rs/src/session/agy.rs), [`src/session/proc.rs`](file:///home/user/Documents/Paros/paros-rs/src/session/proc.rs) |
+| **Surveillance Claude Code** | `src/senses/claude_code_sense.gd` | [`src/session/claude.rs`](file:///home/user/Documents/Paros/paros-rs/src/session/claude.rs), [`src/session/claude_tools.rs`](file:///home/user/Documents/Paros/paros-rs/src/session/claude_tools.rs) |
+| **Surveillance Antigravity CLI & Desktop** | `src/senses/agy_sense.gd` | [`src/session/agy.rs`](file:///home/user/Documents/Paros/paros-rs/src/session/agy.rs), [`src/session/agy_desktop.rs`](file:///home/user/Documents/Paros/paros-rs/src/session/agy_desktop.rs), [`src/session/proc.rs`](file:///home/user/Documents/Paros/paros-rs/src/session/proc.rs), [`src/session/proc_scan.rs`](file:///home/user/Documents/Paros/paros-rs/src/session/proc_scan.rs) |
 | **Historique Sous-Agents AGY** | `src/senses/agy_sense.gd` | [`src/session/agy_history.rs`](file:///home/user/Documents/Paros/paros-rs/src/session/agy_history.rs) |
 | **Surveillance Git** | `src/senses/git_sense.gd` | [`src/session/git.rs`](file:///home/user/Documents/Paros/paros-rs/src/session/git.rs) |
 | **Surveillance Multimédia MPRIS** | `src/senses/music_sense.gd` | [`src/session/mpris.rs`](file:///home/user/Documents/Paros/paros-rs/src/session/mpris.rs) |
@@ -209,22 +211,22 @@ FLUX DE RENDU RUST / HYPRLAND (Zéro GPU, Zéro Allocation 60 FPS) :
 | **Pointeur, Clics & Glisser-déposer** | `src/pet/pointer.gd` | [`src/app/pointer.rs`](file:///home/user/Documents/Paros/paros-rs/src/app/pointer.rs), [`src/app/dnd.rs`](file:///home/user/Documents/Paros/paros-rs/src/app/dnd.rs) |
 | **Menu Contextuel** | `src/ui/context_menu.gd` | [`src/menu.rs`](file:///home/user/Documents/Paros/paros-rs/src/menu.rs) |
 | **Courrier & Lettre Volante** | `src/pet/letter.gd`, `letter_window.tscn` | [`src/letter.rs`](file:///home/user/Documents/Paros/paros-rs/src/letter.rs) |
-| **Configuration Utilisateur** | `src/core/settings.gd` | [`src/settings.rs`](file:///home/user/Documents/Paros/paros-rs/src/settings.rs) |
+| **Configuration Utilisateur** | `src/core/settings.gd` | [`src/settings/mod.rs`](file:///home/user/Documents/Paros/paros-rs/src/settings/mod.rs), [`src/settings/ini.rs`](file:///home/user/Documents/Paros/paros-rs/src/settings/ini.rs), [`src/settings/store.rs`](file:///home/user/Documents/Paros/paros-rs/src/settings/store.rs) |
 | **Internationalisation** | `src/core/language.gd` | [`src/i18n.rs`](file:///home/user/Documents/Paros/paros-rs/src/i18n.rs) |
 | **Effets Sonores** | `src/core/audio.gd` | [`src/sound.rs`](file:///home/user/Documents/Paros/paros-rs/src/sound.rs) |
 
-### 8.2 Métriques et Respect Strict des Limites de Code (< 750 Lignes)
+### 8.2 Métriques et Respect Strict des Limites de Code (< 500 Lignes)
 
-Dans `paros-rs`, **100% des 40 fichiers source respectent la règle d'or architecturale (< 750 lignes)** :
-- Plus grand fichier : [`render/mod.rs`](file:///home/user/Documents/Paros/paros-rs/src/render/mod.rs) (725 lignes).
-- Deuxième plus grand : [`pet/physics.rs`](file:///home/user/Documents/Paros/paros-rs/src/pet/physics.rs) (698 lignes).
-- Troisième plus grand : [`session/claude.rs`](file:///home/user/Documents/Paros/paros-rs/src/session/claude.rs) (673 lignes).
-- Quatrième plus grand : [`app/state.rs`](file:///home/user/Documents/Paros/paros-rs/src/app/state.rs) (654 lignes).
-- Cinquième plus grand : [`settings.rs`](file:///home/user/Documents/Paros/paros-rs/src/settings.rs) (645 lignes).
-- Volume total du projet : 13 463 lignes de code Rust pur.
-- **Qualité du code** : Zéro avertissement de compilation (`cargo check` et `cargo clippy` 100% propres, 0 warning).
+Dans `paros-rs`, **100% des 53 fichiers source respectent la règle absolue du plafond strict (< 500 lignes par fichier)** :
+- Plus grand fichier : [`i18n.rs`](file:///home/user/Documents/Paros/paros-rs/src/i18n.rs) (484 lignes).
+- Deuxième plus grand : [`session/agy_desktop.rs`](file:///home/user/Documents/Paros/paros-rs/src/session/agy_desktop.rs) (469 lignes).
+- Troisième plus grand : [`session/agy.rs`](file:///home/user/Documents/Paros/paros-rs/src/session/agy.rs) (447 lignes).
+- Quatrième plus grand : [`session/agy_history.rs`](file:///home/user/Documents/Paros/paros-rs/src/session/agy_history.rs) (444 lignes).
+- Cinquième plus grand : [`render/draw_pet.rs`](file:///home/user/Documents/Paros/paros-rs/src/render/draw_pet.rs) (439 lignes).
+- Volume total du projet : 14 449 lignes de code Rust pur réparties en 53 modules découplés selon le principe de responsabilité unique (SRP).
+- **Qualité du code** : Zéro avertissement de compilation (`cargo check` et `cargo clippy -- -D warnings` 100% propres, 0 warning).
 
 ### 8.3 Bilan de Non-Régression Combiné
-- **Tests unitaires Rust (`paros-rs`)** : **39/39 tests passants** (0 échec, +7 nouveaux tests de robustesse et non-régression).
-- **Tests Godot de référence (`test.sh`)** : **138/138 tests passants** (0 échec).
-- **Total combiné** : **177/177 tests validés** (100% de conformité fonctionnelle et cinématique).
+- **Tests unitaires Rust (`paros-rs`)** : **43/43 tests passants** (0 échec, +4 nouveaux tests de détection Desktop, cycle de vie et persistance).
+- **Tests Godot de référence (`test.sh`)** : **136/136 tests passants** (0 échec, intégrant `test_agy_desktop_conversations`).
+- **Total combiné** : **179/179 tests validés** (100% de conformité fonctionnelle et cinématique).

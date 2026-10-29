@@ -1,5 +1,5 @@
 #!/bin/sh
-# Lance Paros (version native Rust).
+# Lance Sorap (version native Rust).
 # Options :
 #   -d, --detach   Lance en arrière-plan (détaché).
 #   -k, --kill     Arrête l'instance en cours d'exécution.
@@ -8,7 +8,20 @@
 set -e
 
 here="$(cd "$(dirname "$0")" && pwd)"
-bin="$here/paros-rs/target/release/paros-rs"
+
+# Détermination du binaire : sorap (release/debug) avec repli transparent sur paros-rs
+if [ -x "$here/paros-rs/target/release/sorap" ]; then
+	bin="$here/paros-rs/target/release/sorap"
+elif [ -x "$here/paros-rs/target/debug/sorap" ]; then
+	bin="$here/paros-rs/target/debug/sorap"
+elif [ -x "$here/paros-rs/target/release/paros-rs" ]; then
+	bin="$here/paros-rs/target/release/paros-rs"
+elif [ -x "$here/paros-rs/target/debug/paros-rs" ]; then
+	bin="$here/paros-rs/target/debug/paros-rs"
+else
+	bin="$here/paros-rs/target/release/sorap"
+fi
+
 runtime_dir="${XDG_RUNTIME_DIR:-/tmp}/paros"
 pid_file="$runtime_dir/paros-rs.pid"
 
@@ -44,11 +57,13 @@ if [ "$kill_only" = 1 ]; then
 				kill -9 "$pid" 2>/dev/null || true
 			fi
 			rm -f "$pid_file"
-			echo "Paros (Rust) arrêté (PID $pid)."
+			echo "Sorap (Rust) arrêté (PID $pid)."
 			stopped=1
 		fi
 	fi
-	if pkill -f "paros-rs/target/release/paros-rs" 2>/dev/null; then
+	if pkill -f "paros-rs/target/(release|debug)/(sorap|paros-rs)" 2>/dev/null; then
+		stopped=1
+	elif pkill -f "$bin" 2>/dev/null; then
 		stopped=1
 	fi
 	rm -f "$pid_file"
@@ -62,21 +77,24 @@ fi
 if [ -f "$pid_file" ]; then
 	existing_pid=$(cat "$pid_file" 2>/dev/null || true)
 	if [ -n "$existing_pid" ] && kill -0 "$existing_pid" 2>/dev/null; then
-		echo "Paros (Rust) tourne déjà (PID $existing_pid)."
+		echo "Sorap (Rust) tourne déjà (PID $existing_pid)."
 		exit 0
 	fi
 fi
 
 # Garde session verrouillée : ne pas démarrer par-dessus l'écran de verrouillage
 if [ -f "/tmp/hypr_locked" ] || pidof hyprlock >/dev/null; then
-	echo "Session verrouillée (hyprlock actif) : lancement de Paros différé."
+	echo "Session verrouillée (hyprlock actif) : lancement de Sorap différé."
 	exit 0
 fi
 
 # Compiler si absent ou si demandé
 if [ ! -x "$bin" ] || [ "$rebuild" = 1 ]; then
-	echo "Compilation de paros-rs en mode release..."
+	echo "Compilation de sorap en mode release..."
 	cargo build --release --manifest-path "$here/paros-rs/Cargo.toml"
+	if [ -x "$here/paros-rs/target/release/sorap" ]; then
+		bin="$here/paros-rs/target/release/sorap"
+	fi
 fi
 
 mkdir -p "$runtime_dir" 2>/dev/null
@@ -89,12 +107,12 @@ if [ "$detach" = 1 ]; then
 	fi
 
 	sleep 0.2
-	pid=$(pgrep -f "paros-rs/target/release/paros-rs" | tail -n 1)
+	pid=$(pgrep -f "$bin" | tail -n 1)
 	if [ -n "$pid" ]; then
 		echo "$pid" > "$pid_file"
-		echo "Paros (Rust) lancé en arrière-plan (PID $pid)."
+		echo "Sorap (Rust) lancé en arrière-plan (PID $pid)."
 	else
-		echo "Paros (Rust) lancé en arrière-plan."
+		echo "Sorap (Rust) lancé en arrière-plan."
 	fi
 	exit 0
 fi

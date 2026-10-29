@@ -149,7 +149,7 @@ impl HyprlandClient {
             return None;
         }
         let win: HyprWindow = serde_json::from_str(&raw).ok()?;
-        if win.mapped && win.class != "Paros" && win.class != "paros-rs" {
+        if win.mapped && win.class != "Paros" && win.class != "paros-rs" && win.class != "Sorap" && win.class != "sorap" {
             Some(win)
         } else {
             None

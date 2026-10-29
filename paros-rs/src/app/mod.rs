@@ -4,9 +4,12 @@ pub mod engine;
 pub mod pointer;
 pub mod render_pass;
 pub mod sessions;
+pub mod session_sync;
 pub mod social;
 pub mod social_pyramids;
 pub mod state;
+pub mod state_resolve;
+pub mod state_spread;
 pub mod types;
 
 use std::num::NonZeroU32;

@@ -1,8 +1,8 @@
-# Paros
+# Sorap
 
 [English](README.md) · **Français**
 
-Compagnon de bureau pour Claude Code et agy (Google Antigravity CLI). Un petit personnage en pixels vit au bas de l'écran, un par session ouverte. Un coup d'œil suffit pour savoir ce que fait chaque session : elle travaille, elle attend une réponse, elle a fini.
+Compagnon de bureau pour Claude Code et agy (Google Antigravity : la CLI agy et Antigravity Desktop). Un petit personnage en pixels vit au bas de l'écran, un par session ouverte. Un coup d'œil suffit pour savoir ce que fait chaque session : elle travaille, elle attend une réponse, elle a fini.
 
 Compatible avec [Diaulos](https://github.com/Dr1mS/Diaulos), le pont entre sessions agy et Claude Code : les messages qu'elles s'envoient volent d'un personnage à l'autre sous forme de lettres.
 
@@ -10,16 +10,16 @@ Compatible avec [Diaulos](https://github.com/Dr1mS/Diaulos), le pont entre sessi
 
 Godot 4.7, GDScript. Aucun fichier image ni son : tout est dessiné et synthétisé par le code.
 
-> Paros est un projet de fan non officiel. Il n'est ni affilié à Anthropic ou Google ni approuvé par eux.
+> Sorap (issu de Paros) est un projet de fan non officiel. Il n'est ni affilié à Anthropic ou Google ni approuvé par eux.
 
 ## Ce qu'il fait
 
 - **Un personnage par session.** Il porte le nom de la session (`/rename`) et la branche git sous ses pieds, prend la couleur de la session (`/color`) et a son propre accessoire.
 - **Il montre l'état de la session.** Il réfléchit quand Claude travaille, avec l'outil en cours au-dessus de la tête. Il agite les bras quand Claude attend une permission ou une réponse. Il saute quand le tour est fini.
-- **Il réagit à ton travail.** Tests verts ou rouges, commandes échouées, contexte plein, modifications non commitées, fusion en cours, commit propre.
+- **Il réagit à votre travail.** Tests verts ou rouges, commandes échouées, contexte plein, modifications non commitées, fusion en cours, commit propre.
 - **Chaque sous-agent a son petit personnage.** Il reste près du grand, affiche son outil en cours, et joue comme un enfant : il saute, court vers les autres, monte des pyramides avec eux. Seize au plus par session.
 - **Il se vide la tête quand le contexte est compacté.** Assis près d'une corbeille, il sort des feuilles de sa tête, les froisse et les y jette, puis secoue la tête, plus léger.
-- **Les sessions agy ont aussi leur personnage.** Il est dessiné d'après la mascotte d'agy, un « A » en dégradé, et vit avec les personnages Claude. Il réfléchit, montre son outil, fait signe quand agy te pose une question, a des petits personnages pour ses sous-agents, attend ses commandes en arrière-plan, saute de joie en fin de tour, et écrit des lettres par Diaulos. Voir [agy](docs/fr/agy.md).
+- **Les sessions agy ont aussi leur personnage.** Il est dessiné d'après la mascotte d'agy, un « A » en dégradé, et vit avec les personnages Claude. Il réfléchit, montre son outil, fait signe quand agy vous pose une question, a des petits personnages pour ses sous-agents, attend ses commandes en arrière-plan, saute de joie en fin de tour, et écrit des lettres par Diaulos. Les sessions de la CLI agy et les conversations d'Antigravity Desktop, tant que la fenêtre les affiche ou qu'elles travaillent, en ont toutes un. Voir [agy](docs/fr/agy.md).
 - **Le sage vient quand la session consulte l'advisor.** Chapeau pointu, barbe blanche et bâton : il lit la lettre que le personnage lui lance, répond, puis sort de l'écran.
 - **Il vit sur le bureau.** Il traverse les écrans, s'assoit, dort la nuit, salue les autres personnages, se laisse lancer, grimpe sur la fenêtre active.
 - **Il ne gêne pas.** Un clic à côté de lui le traverse. Il quitte l'écran d'une application en plein écran.
@@ -65,19 +65,19 @@ Trois étapes facultatives complètent l'installation :
 
 Sans elles, les personnages suivent quand même les sessions, leur nom, leur couleur et leur état.
 
-Les sessions agy ne demandent rien de plus : Paros les trouve seul, sous Linux. Un hook facultatif signale la fin d'un tour annulé : voir [agy](docs/fr/agy.md#le-hook).
+Les sessions agy ne demandent rien de plus : Sorap trouve seul celles de la CLI agy et d'Antigravity Desktop, sous Linux. Les personnages Desktop se désactivent dans les réglages. Un hook facultatif signale la fin d'un tour annulé : voir [agy](docs/fr/agy.md#le-hook).
 
-Sous Linux, pour voir le sage pendant que l'advisor travaille, il faut `python3-gi` (présent avec GNOME) : Paros lit alors le texte visible des terminaux. Voir [Advisor](docs/fr/claude-code.md#advisor) et [Confidentialité](docs/fr/claude-code.md#confidentialité).
+Sous Linux, pour voir le sage pendant que l'advisor travaille, il faut `python3-gi` (présent avec GNOME) : Sorap lit alors le texte visible des terminaux. Voir [Advisor](docs/fr/claude-code.md#advisor) et [Confidentialité](docs/fr/claude-code.md#confidentialité).
 
 Pour lancer sans Godot, construire un binaire autonome avec `./build.sh` (voir [Développement](docs/fr/developpement.md#exporter-en-binaire)).
 
-### Mode natif Wayland (Hyprland) sans Godot (`paros-rs`)
+### Mode natif Wayland (Hyprland) sans Godot (`sorap`)
 
-Paros intègre également un démon autonome natif en Rust pour Wayland Layer Shell (`paros-rs`), ne nécessitant aucune règle de fenêtre ni moteur de jeu :
+Sorap intègre également un démon autonome natif en Rust pour Wayland Layer Shell (`sorap`), ne nécessitant aucune règle de fenêtre ni moteur de jeu :
 
-- **Ultra-léger** : Binaire dépouillé de 2,3 Mo, 72,3 Mo VmRSS (dont 48,6 Mo de tampons partagés `wl_shm`), 0% GPU (rendu vectoriel 100% logiciel CPU via Tiny-Skia).
-- **Architecture** : 40 modules rigoureusement sous le plafond strict (< 750 lignes), 0 avertissement Clippy, 177/177 tests validés (39 tests unitaires Rust + 138 tests Godot de référence).
-- **Fonctionnalités** : Traversée des clics transparente (`wl_region`), support multi-écrans natif, zéro vol de focus clavier (`KeyboardInteractivity::None`), cache de glyphes pré-rastérisés, parsing différentiel O(1) et éradication des processus zombies.
+- **Ultra-léger** : Binaire dépouillé de 2,4 Mo, 72,3 Mo VmRSS (dont 48,6 Mo de tampons partagés `wl_shm`), 0% GPU (rendu vectoriel 100% logiciel CPU via Tiny-Skia).
+- **Architecture** : 53 modules rigoureusement sous le plafond strict (< 500 lignes), 0 avertissement Clippy, 179/179 tests validés (43 tests unitaires Rust + 136 tests Godot de référence).
+- **Fonctionnalités** : Prise en charge native de la CLI agy et d'Antigravity Desktop, traversée des clics transparente (`wl_region`), support multi-écrans natif, zéro vol de focus clavier (`KeyboardInteractivity::None`), cache de glyphes pré-rastérisés, parsing différentiel O(1) et éradication des processus zombies.
 - **Comparaison détaillée** : Voir la [matrice comparative d'architecture (`compatch.md`)](compatch.md) et le [guide Rust natif](docs/fr/paros-rs.md).
 
 ```sh
@@ -104,11 +104,11 @@ Paros intègre également un démon autonome natif en Rust pour Wayland Layer Sh
 | Guide | Contenu |
 |---|---|
 | [Utilisation](docs/fr/utilisation.md) | Tous les comportements, les gestes, le menu, les réglages |
-| [Claude Code](docs/fr/claude-code.md) | Ce que Paros lit des sessions, sous-agents, advisor, installation des hooks, confidentialité |
-| [agy](docs/fr/agy.md) | Sessions agy, lettres par Diaulos, hook facultatif, limites |
+| [Claude Code](docs/fr/claude-code.md) | Ce que Sorap lit des sessions, sous-agents, advisor, installation des hooks, confidentialité |
+| [agy](docs/fr/agy.md) | Sessions CLI agy et conversations Antigravity Desktop, lettres par Diaulos, hook facultatif, limites |
 | [Extension GNOME](docs/fr/extension-gnome.md) | Focus du terminal, perchoir, écran de verrouillage, plein écran |
 | [Hyprland](docs/fr/hyprland.md) | Règles de fenêtres, script auxiliaire et fonctionnalités sous Hyprland |
-| [Rust natif (`paros-rs`)](docs/fr/paros-rs.md) | Compagnon natif Wayland Layer Shell, configuration et exécution |
+| [Rust natif (`sorap`)](docs/fr/paros-rs.md) | Compagnon natif Wayland Layer Shell, configuration et exécution |
 | [Architecture Rust](docs/fr/architecture-rs.md) | Architecture modulaire multi-sessions Layer Shell, pipeline tiny-skia |
 | [Cycle de vie](docs/fr/cycle-de-vie.md) | Cycle de vie des mascottes, sous-agents, sage et lettres volantes |
 | [Architecture](docs/fr/architecture.md) | Organisation du code, référence des événements, comment ajouter un sens ou un comportement |

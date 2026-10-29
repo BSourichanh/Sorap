@@ -266,16 +266,21 @@ pub fn tr(lang: Lang, text: &str) -> &str {
             Lang::En => "Close",
             Lang::Fr => "Fermer",
         },
-        "Quit" | "Quitter" | "Quitter Paros" | "menu_quit" => match lang {
+        "Quit" | "Quitter" | "Quitter Paros" | "Quitter Sorap" | "menu_quit" => match lang {
             Lang::En => "Quit",
             Lang::Fr => "Quitter",
         },
 
         // Fenêtre de réglages (settings_window.gd + language.gd)
-        "Paros — Settings" | "Paros — Réglages" | "settings_title" => match lang {
-            Lang::En => "Paros — Settings",
-            Lang::Fr => "Paros — Réglages",
+        "Sorap — Settings" | "Sorap — Réglages" | "Paros — Settings" | "Paros — Réglages" | "settings_title" => match lang {
+            Lang::En => "Sorap — Settings",
+            Lang::Fr => "Sorap — Réglages",
         },
+        "About Sorap" | "À propos de Sorap" | "About Paros" | "À propos de Paros" => match lang {
+            Lang::En => "About Sorap",
+            Lang::Fr => "À propos de Sorap",
+        },
+        "Sorap" | "Paros" => "Sorap",
         "Pet" | "Personnage" => match lang {
             Lang::En => "Pet",
             Lang::Fr => "Personnage",
@@ -386,6 +391,17 @@ pub fn tr(lang: Lang, text: &str) -> &str {
         "Follow the git status of folders" | "Suivre l'état git des dossiers" => match lang {
             Lang::En => "Follow the git status of folders",
             Lang::Fr => "Suivre l'état git des dossiers",
+        },
+        "agy" => "agy",
+        "Pets for Antigravity Desktop conversations"
+        | "Personnages pour les conversations d'Antigravity Desktop" => match lang {
+            Lang::En => "Pets for Antigravity Desktop conversations",
+            Lang::Fr => "Personnages pour les conversations d'Antigravity Desktop",
+        },
+        "A Desktop pet leaves after an idle of"
+        | "Un personnage Desktop part après une inactivité de" => match lang {
+            Lang::En => "A Desktop pet leaves after an idle of",
+            Lang::Fr => "Un personnage Desktop part après une inactivité de",
         },
         "Desktop (GNOME extension)" | "Bureau (extension GNOME)" => match lang {
             Lang::En => "Desktop (GNOME extension)",

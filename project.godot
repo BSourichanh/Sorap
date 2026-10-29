@@ -10,9 +10,9 @@ config_version=5
 
 [application]
 
-config/name="Paros"
+config/name="Sorap"
 config/use_custom_user_dir=true
-config/custom_user_dir_name="paros"
+config/custom_user_dir_name="sorap"
 run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 run/max_fps=30

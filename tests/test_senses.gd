@@ -751,29 +751,53 @@ func test_agy_session_opens_works_then_closes() -> void:
 	sense.free()
 
 
-func test_agy_background_session_stays_alive_while_working() -> void:
+## Antigravity Desktop: one language_server runs every conversation of a
+## window and holds the presence lock of the one the window shows.
+func test_agy_desktop_conversations() -> void:
 	if OS.get_name() != "Linux":
 		return
 	var sense := agy_sense()
-	add_steps(sense, [
-		{"type": "USER_INPUT", "content": "<USER_REQUEST>\nlong task\n</USER_REQUEST>"},
-		call_step("run_command", {"CommandLine": "sleep 10"}),
-	])
-	check_equal(last_event(&"session_phase").get("phase"), &"working", "working on the task")
-	# Simulate switching tabs: the process releases the fd of this conversation
-	OS.execute("rm", [folder.path_join("proc/4242/fd/75")])
+	var desktop := folder.path_join("desktop")
+	sense._server_dirs = [desktop]
+	var shown := "11111111-1111-1111-1111-111111111111"
+	var recent := "22222222-2222-2222-2222-222222222222"
+	var idle := "33333333-3333-3333-3333-333333333333"
+	var subagent := "44444444-4444-4444-4444-444444444444"
+	write(folder.path_join("proc/5555/comm"), "language_server\n")
+	DirAccess.make_dir_recursive_absolute(folder.path_join("proc/5555/fd"))
+	write(desktop.path_join("presence/%s.lock" % shown), "")
+	OS.execute("ln", ["-s", desktop.path_join("presence/%s.lock" % shown), folder.path_join("proc/5555/fd/9")])
+	for id in [shown, recent, idle, subagent]:
+		write(desktop.path_join("brain/%s/.system_generated/logs/transcript_full.jsonl" % id), "")
+	for id in [shown, recent, idle]:
+		write(desktop.path_join("annotations/%s.pbtxt" % id), 'title:"%s"\n' % id.left(4))
+	OS.execute("touch", ["-d", "2 hours ago", desktop.path_join("brain/%s/.system_generated/logs/transcript_full.jsonl" % shown)])
+	OS.execute("touch", ["-d", "2 hours ago", desktop.path_join("brain/%s/.system_generated/logs/transcript_full.jsonl" % idle)])
+	write(folder.path_join("bridge/peers/agy-%s.json" % recent), JSON.stringify({"workspace": folder.path_join("my work")}))
+	sense._poll()
+	var opened := {}
+	for event: Array in _events:
+		if event[0] == &"session_opened":
+			opened[event[1].session] = event[1]
+	check(opened.has(shown), "the conversation the window shows")
+	check(opened.has(recent), "a conversation with a recent step")
+	check(not opened.has(idle), "no pet for a conversation idle for long")
+	check(not opened.has(subagent), "no pet for a subagent: no annotations, unknown to the bridge")
+	check_equal(opened[recent].get("pid"), 5555, "its language server")
+	check_equal(opened[recent].get("cwd"), folder.path_join("my work"), "its folder, from the bridge")
+	check_equal(opened[shown].get("name"), "1111", "named after its title")
+	check(opened.has(CONVERSATION), "the agy CLI session is still seen")
+
+	Settings.set_value("agy", "desktop", false)
 	sense._scan_in = 0.0
 	sense._poll()
-	check(&"session_closed" not in event_names(), "stays alive while working in background")
-	# The turn finishes in background
-	add_steps(sense, [
-		result_step("done"),
-		{"type": "PLANNER_RESPONSE", "content": "Done."},
-	])
-	check(&"session_finished" in event_names(), "finishes in background")
-	sense._scan_in = 0.0
-	sense._poll()
-	check(&"session_closed" in event_names(), "closes once idle and no longer held")
+	Settings.set_value("agy", "desktop", true)
+	var closed := []
+	for event: Array in _events:
+		if event[0] == &"session_closed":
+			closed.append(event[1].session)
+	check(shown in closed and recent in closed, "the setting turns the Desktop pets off")
+	check(CONVERSATION not in closed, "not the agy CLI ones")
 	sense.free()
 
 
@@ -933,61 +957,4 @@ func test_agy_question_subagents_kill_timer_errors_and_checkpoint() -> void:
 	check_equal(last_event(&"session_compacting"), {"session": CONVERSATION, "compacting": false, "auto": true}, "the context was truncated")
 	sense.free()
 
-
-func test_antigravity_subagent_focus_not_main_session() -> void:
-	if OS.get_name() != "Linux":
-		return
-	var sense := agy_sense()
-	write(folder.path_join("proc/4242/comm"), "language_server\n")
-	write(folder.path_join("agy/annotations/%s.pbtxt" % CONVERSATION), 'title:"Parent Session"\n')
-	add_steps(sense, [
-		{"type": "USER_INPUT", "content": "<USER_REQUEST>\nParent work\n</USER_REQUEST>"},
-		{"type": "PLANNER_RESPONSE", "content": "Done."},
-	])
-	check_equal(last_event(&"session_opened").get("session"), CONVERSATION, "parent session opened")
-
-	# Subagent conversation
-	var subagent := "99999999-8888-7777-6666-555555555555"
-	var sub_path := folder.path_join("agy/brain/%s/.system_generated/logs/transcript_full.jsonl" % subagent)
-	write(sub_path, JSON.stringify({"type": "SYSTEM_MESSAGE", "source": "SYSTEM", "content": "[Message] timestamp=x sender=%s priority=HIGH content=task" % CONVERSATION}) + "\n")
-
-	# Focus switches to subagent conversation in language_server
-	write(folder.path_join("agy/presence/%s.lock" % subagent), "")
-	OS.execute("rm", [folder.path_join("proc/4242/fd/75")])
-	OS.execute("ln", ["-s", folder.path_join("agy/presence/%s.lock" % subagent), folder.path_join("proc/4242/fd/76")])
-	sense._scan_in = 0.0
-	sense._poll()
-
-	# Verify subagent is NOT opened as a main session
-	var opened_sessions: Array = _events.filter(func(e: Array) -> bool: return e[0] == &"session_opened").map(func(e: Array) -> Variant: return e[1].get("session"))
-	check(subagent not in opened_sessions, "subagent is never opened as a main session")
-	# And parent session stays alive because IDE is still running
-	check(&"session_closed" not in event_names(), "parent session remains alive while IDE runs")
-	sense.free()
-
-
-func test_antigravity_desktop_metadata_resolution() -> void:
-	if OS.get_name() != "Linux":
-		return
-	var sense := agy_sense()
-	write(folder.path_join("proc/4242/comm"), "language_server\n")
-	OS.execute("rm", [folder.path_join("proc/4242/cwd")])
-	OS.execute("ln", ["-s", Desktop.home(), folder.path_join("proc/4242/cwd")])
-
-	sense._desktop_meta = {
-		CONVERSATION: {
-			"title": "Clean Project Title",
-			"cwd": "/home/user/Projects/MyCustomApp",
-			"parent_id": "",
-			"not_idle": true,
-		}
-	}
-	add_steps(sense, [
-		{"type": "USER_INPUT", "content": "<USER_REQUEST>\nwork\n</USER_REQUEST>"},
-		{"type": "PLANNER_RESPONSE", "content": "Done."},
-	])
-	var opened := last_event(&"session_opened")
-	check_equal(opened.get("name"), "Clean Project Title", "title resolved from desktop metadata")
-	check_equal(opened.get("cwd"), "/home/user/Projects/MyCustomApp", "cwd resolved from desktop metadata instead of HOME")
-	sense.free()
 

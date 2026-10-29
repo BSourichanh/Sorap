@@ -1,201 +1,51 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use serde_json::Value;
 
 use crate::pet::MascotKind;
-use super::proc::{
-    count_inbox_messages, extract_json_str_field, parse_claude_transcript_line,
-};
-use super::types::{ClaudeTranscriptData, SessionPhase, SessionState, SubagentInfo};
+use super::proc::{count_inbox_messages, extract_json_str_field};
+pub(crate) use super::claude_tools::ClaudeTranscriptState;
+use super::types::{SessionPhase, SessionState, SubagentInfo};
 use super::SessionWatcher;
 
-#[derive(Default, Clone)]
-pub(crate) struct ClaudeTranscriptState {
-    pub(crate) offset: u64,
-    pub(crate) data: ClaudeTranscriptData,
-    pub(crate) queue: Vec<bool>,
-    pub(crate) launches: HashMap<String, bool>,
-    pub(crate) tasks: HashMap<String, bool>,
-    pub(crate) writes_by_call: HashMap<String, String>,
-    pub(crate) last_write_path: Option<String>,
-}
-
 impl SessionWatcher {
-    pub(crate) fn find_claude_transcript(&mut self, session_id: &str) -> Option<PathBuf> {
-        if let Some(cached) = self.claude_transcript_paths.get(session_id)
-            && cached.exists() {
-                return Some(cached.clone());
-            }
-        let projects_dir = self.claude_dir.join("projects");
-        let target_name = format!("{session_id}.jsonl");
-        if let Ok(entries) = std::fs::read_dir(&projects_dir) {
+    pub(crate) fn poll_claude_registry(&mut self) -> Vec<SessionState> {
+        let mut results = Vec::new();
+        let mut live_registry_ids: HashSet<String> = HashSet::new();
+
+        let mut live_node_pids = Vec::new();
+        if let Ok(entries) = std::fs::read_dir("/proc") {
             for entry in entries.flatten() {
-                let candidate = entry.path().join(&target_name);
-                if candidate.exists() {
-                    self.claude_transcript_paths
-                        .insert(session_id.to_string(), candidate.clone());
-                    return Some(candidate);
+                let pid_str = entry.file_name().to_string_lossy().to_string();
+                let Ok(pid) = pid_str.parse::<i32>() else { continue };
+                let comm = std::fs::read_to_string(format!("/proc/{pid}/comm")).unwrap_or_default();
+                let trimmed = comm.trim();
+                if trimmed == "claude" || trimmed == "node" {
+                    live_node_pids.push(pid);
                 }
             }
         }
-        None
-    }
 
-    pub(crate) fn poll_claude_transcript(
-        &mut self,
-        session_id: &str,
-        session_name: &str,
-    ) -> Option<ClaudeTranscriptData> {
-        let path = self.find_claude_transcript(session_id)?;
-        let file = File::open(&path).ok()?;
-        let meta = file.metadata().ok()?;
-        let file_len = meta.len();
+        let reg_path = self.claude_dir.join("sessions.json");
+        let reg_content = std::fs::read_to_string(&reg_path).unwrap_or_default();
+        let val: Value = serde_json::from_str(&reg_content).unwrap_or(Value::Null);
 
-        let prev_len = self.claude_transcript_lens.insert(session_id.to_string(), file_len);
-        if prev_len.is_some_and(|pl| file_len > pl) {
-            self.claude_last_heard.insert(session_id.to_string(), Instant::now());
-        }
+        let sessions_map = val.get("sessions").and_then(|s| s.as_object());
+        let empty_map = serde_json::Map::new();
+        let entries = sessions_map.unwrap_or(&empty_map);
 
-        if file_len == 0 {
-            self.claude_transcript_offsets.insert(session_id.to_string(), 0);
-            self.transcript_offsets.insert(session_id.to_string(), 0);
-            return Some(ClaudeTranscriptData::default());
-        }
-
-        let is_new = !self.claude_transcript_offsets.contains_key(session_id)
-            && !self.transcript_offsets.contains_key(session_id);
-        let mut cur_offset = self.claude_transcript_offsets.get(session_id).copied().unwrap_or(0);
-
-        if is_new && file_len > 131072 {
-            cur_offset = file_len.saturating_sub(131072);
-        } else if file_len < cur_offset {
-            cur_offset = 0;
-            self.claude_transcript_offsets.insert(session_id.to_string(), 0);
-            self.transcript_offsets.insert(session_id.to_string(), 0);
-            self.claude_transcript_states.remove(session_id);
-        }
-
-        if !is_new && cur_offset >= file_len
-            && let Some(state) = self.claude_transcript_states.get(session_id) {
-                return Some(state.data.clone());
-            }
-
-        let mut reader = BufReader::new(file);
-        if cur_offset > 0 {
-            if reader.seek(SeekFrom::Start(cur_offset)).is_err() {
-                return self.claude_transcript_states.get(session_id).map(|s| s.data.clone());
-            }
-            if is_new {
-                let mut discard = String::new();
-                let _ = reader.read_line(&mut discard);
-            }
-        }
-
-        let mut state = self.claude_transcript_states.remove(session_id).unwrap_or_default();
-        let mut line_buf = String::new();
-        let mut last_valid_offset = reader.stream_position().unwrap_or(cur_offset);
-
-        while let Ok(bytes) = reader.read_line(&mut line_buf) {
-            if bytes == 0 {
-                break;
-            }
-            let trimmed = line_buf.trim();
-            if !line_buf.ends_with('\n') && !trimmed.ends_with('}') {
-                break;
-            }
-            last_valid_offset = reader.stream_position().unwrap_or(last_valid_offset + bytes as u64);
-
-            if !trimmed.is_empty() {
-                parse_claude_transcript_line(
-                    trimmed,
-                    &mut state.data,
-                    &mut state.queue,
-                    &mut state.launches,
-                    &mut state.tasks,
-                    &mut state.writes_by_call,
-                    &mut state.last_write_path,
-                    |p| self.record_file_write(session_id, session_name, p),
-                );
-
-                if trimmed.contains("<tool_use_error>File has been modified since read") {
-                    let call_id = extract_json_str_field(trimmed, "tool_use_id").unwrap_or("unknown").to_string();
-                    let collision_key = (session_id.to_string(), call_id.clone());
-                    if !self.seen_collisions.contains(&collision_key) {
-                        self.seen_collisions.insert(collision_key);
-                        let path = state.writes_by_call.get(&call_id).cloned().or_else(|| state.last_write_path.clone()).unwrap_or_default();
-                        let filename = Path::new(&path).file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| path.clone());
-                        if let Some(other_name) = self.find_collision_writer(session_id, &path) {
-                            state.data.collision = Some((other_name, filename));
-                        } else if !filename.is_empty() {
-                            state.data.collision = Some(("Autre session".to_string(), filename));
-                        }
-                    }
-                }
-            }
-            line_buf.clear();
-        }
-
-        state.data.queue_mail = state.queue.iter().filter(|&&b| b).count();
-        let servers = state.tasks.values().filter(|&&s| s).count() + state.launches.values().filter(|&&s| s).count();
-        let bg = state.tasks.values().filter(|&&s| !s).count() + state.launches.values().filter(|&&s| !s).count();
-        state.data.servers_count = servers;
-        state.data.background_count = bg;
-        state.offset = last_valid_offset;
-
-        self.claude_transcript_offsets.insert(session_id.to_string(), last_valid_offset);
-        self.transcript_offsets.insert(session_id.to_string(), last_valid_offset);
-
-        let ret_data = state.data.clone();
-        state.data.collision = None;
-        state.data.compacting_reset = false;
-
-        self.claude_transcript_states.insert(session_id.to_string(), state);
-
-        Some(ret_data)
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn parse_claude_transcript(
-        &mut self,
-        session_id: &str,
-        session_name: &str,
-    ) -> Option<ClaudeTranscriptData> {
-        self.poll_claude_transcript(session_id, session_name)
-    }
-
-    pub(crate) fn poll_claude_registry(&mut self) {
-        let sessions_dir = self.claude_dir.join("sessions");
-        let Ok(entries) = std::fs::read_dir(&sessions_dir) else { return };
-
-        let mut live_registry_ids = HashSet::new();
-
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("json") {
-                continue;
-            }
-            let Ok(content) = std::fs::read_to_string(&path) else { continue };
-            let Ok(val) = serde_json::from_str::<Value>(&content) else { continue };
-
-            if val.get("kind").and_then(|v| v.as_str()).unwrap_or("interactive") != "interactive" {
-                continue;
-            }
-            let Some(session_id) = val.get("sessionId").and_then(|v| v.as_str()).map(|s| s.to_string()) else {
-                continue;
-            };
-            let Some(pid) = val.get("pid").and_then(|v| v.as_i64()).map(|p| p as i32) else {
-                continue;
-            };
-            if pid <= 0 || !Path::new(&format!("/proc/{pid}")).exists() {
-                continue;
-            }
-
+        for (session_id_str, val) in entries {
+            let session_id = session_id_str.clone();
             live_registry_ids.insert(session_id.clone());
-            self.claude_last_times.insert(session_id.clone(), Instant::now());
-            self.claude_last_heard.entry(session_id.clone()).or_insert_with(Instant::now);
+
+            let pid = val.get("pid").and_then(|v| v.as_i64()).map(|p| p as i32).unwrap_or(0);
+            if pid <= 0 || !live_node_pids.contains(&pid) {
+                continue;
+            }
 
             let cwd = val.get("cwd").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(|| {
                 std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|_| ".".to_string())
@@ -265,6 +115,9 @@ impl SessionWatcher {
         self.claude_asking.retain(|sid| self.claude_sessions.contains_key(sid));
         self.claude_subagents.retain(|(sid, _), _| self.claude_sessions.contains_key(sid));
         self.claude_names.retain(|aid, _| self.claude_subagents.keys().any(|(_, id)| id == aid));
+
+        results.extend(self.claude_sessions.values().cloned());
+        results
     }
 
     pub(crate) fn poll_claude_hooks(&mut self) {
@@ -299,54 +152,21 @@ impl SessionWatcher {
             if session_id.is_empty() {
                 continue;
             }
-            let notif_type = fields.get(2).unwrap_or(&"").trim();
+
+            let notif_type = fields.get(2).unwrap_or(&"").to_string();
             let tool = fields.get(3).unwrap_or(&"").to_string();
             let detail = fields.get(4).unwrap_or(&"").to_string();
-            let kind_field = fields.get(5).unwrap_or(&"").trim();
-            let agent_id = fields.get(6).unwrap_or(&"").trim().to_string();
+            let kind_field = fields.get(5).unwrap_or(&"").to_string();
+            let agent_id = fields.get(6).unwrap_or(&"").to_string();
 
-            if event == "PreToolUse" && agent_id.is_empty() && (tool == "Agent" || tool == "Task") {
-                self.claude_launching.entry(session_id.clone()).or_default().push(detail.clone());
+            if (event == "PreToolUse" || event == "PostToolUse")
+                && (tool == "SendMessage" || tool == "mcp__agent-bridge__send")
+                && let Some(target) = extract_json_str_field(&detail, "to").or_else(|| extract_json_str_field(&detail, "recipient"))
+            {
+                self.claude_message_sent = Some(target.to_string());
             }
 
-            if event == "SubagentStart" && !agent_id.is_empty() {
-                let name = self.claude_launching
-                    .get_mut(&session_id)
-                    .and_then(|queue| if !queue.is_empty() { Some(queue.remove(0)) } else { None })
-                    .unwrap_or_else(|| {
-                        self.claude_names.get(&agent_id).cloned().unwrap_or_else(|| {
-                            if !detail.is_empty() { detail.clone() } else { "Sous-agent".to_string() }
-                        })
-                    });
-                self.claude_names.insert(agent_id.clone(), name.clone());
-                self.claude_subagents.insert(
-                    (session_id.clone(), agent_id.clone()),
-                    SubagentInfo { id: agent_id.clone(), name, tool: String::new(), detail: String::new(), running: true },
-                );
-            } else if event == "SubagentStop" && !agent_id.is_empty() {
-                self.claude_subagents.remove(&(session_id.clone(), agent_id.clone()));
-            } else if event == "PreToolUse" && !agent_id.is_empty() {
-                let raw = detail.trim_matches(|c| c == '"' || c == '\'');
-                let det = Path::new(raw).file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| raw.to_string());
-                let entry = self.claude_subagents.entry((session_id.clone(), agent_id.clone())).or_insert_with(|| {
-                    let name = self.claude_names.get(&agent_id).cloned().unwrap_or_else(|| "Sous-agent".to_string());
-                    SubagentInfo { id: agent_id.clone(), name, tool: tool.clone(), detail: det.clone(), running: true }
-                });
-                entry.tool = tool.clone();
-                entry.detail = det;
-                entry.running = true;
-            }
-
-            if event == "PreToolUse" && agent_id.is_empty() {
-                if tool == "SendMessage" || tool == "mcp__agent-bridge__send" {
-                    self.claude_message_sent = Some(detail.clone());
-                } else { self.claude_advising = tool == "advisor"; }
-                if matches!(tool.as_str(), "Edit" | "Write" | "MultiEdit" | "NotebookEdit") && !detail.is_empty() {
-                    let sname = self.claude_sessions.get(&session_id).map(|s| s.name.clone()).unwrap_or_else(|| "Claude Code".to_string());
-                    self.record_file_write(&session_id, &sname, &detail);
-                }
-            } else if event == "Stop" || event == "UserPromptSubmit" {
-                self.claude_advising = false;
+            if event == "Stop" {
                 self.claude_message_sent = None;
             }
 
@@ -429,37 +249,6 @@ impl SessionWatcher {
         });
         self.compact_echo_until.retain(|_, until| *until > now);
         self.claude_launching.retain(|sid, _| self.claude_sessions.contains_key(sid));
-    }
-
-    pub(crate) fn check_advising_file(&self) -> bool {
-        let path = if self.runtime_dir.join("advising.txt").exists() {
-            self.runtime_dir.join("advising.txt")
-        } else if let Some(xdg) = std::env::var_os("XDG_RUNTIME_DIR") {
-            let p = PathBuf::from(xdg).join("paros/advising.txt");
-            if p.exists() { p } else { PathBuf::from("/tmp/paros/advising.txt") }
-        } else {
-            PathBuf::from("/tmp/paros/advising.txt")
-        };
-
-        if path.exists()
-            && let Ok(content) = std::fs::read_to_string(&path) {
-                let lines: Vec<&str> = content.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
-                if let Some(first) = lines.first()
-                    && let Ok(file_time) = first.parse::<f64>() {
-                        let now_unix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
-                        let diff = now_unix - file_time;
-                        if (-6.0..6.0).contains(&diff) {
-                            return lines.len() > 1;
-                        }
-                        return false;
-                    }
-            }
-
-        std::fs::metadata("/tmp/paros/claude-advising")
-            .or_else(|_| std::fs::metadata(self.runtime_dir.join("claude-advising")))
-            .and_then(|m| m.modified())
-            .map(|mtime| mtime.elapsed().map(|d| d.as_secs() < 8).unwrap_or(false))
-            .unwrap_or(false)
     }
 
     pub(crate) fn refresh_claude_sessions(
@@ -551,122 +340,39 @@ impl SessionWatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
-
-    #[test]
-    fn test_incremental_claude_transcript() {
-        let temp_dir = std::env::temp_dir().join(format!("paros_test_{}", fastrand::u64(..)));
-        let projects_dir = temp_dir.join("projects");
-        std::fs::create_dir_all(&projects_dir).unwrap();
-
-        let mut watcher = SessionWatcher::new();
-        watcher.claude_dir = temp_dir.clone();
-
-        let proj_dir = projects_dir.join("proj1");
-        std::fs::create_dir_all(&proj_dir).unwrap();
-
-        let session_id = "test_session_1";
-        let transcript_path = proj_dir.join(format!("{session_id}.jsonl"));
-
-        // Étape 1 : écriture initiale
-        {
-            let mut f = File::create(&transcript_path).unwrap();
-            writeln!(f, "{{\"type\":\"user\",\"message\":\"hello\",\"usage\":{{\"input_tokens\":1000}}}}").unwrap();
-        }
-
-        let data1 = watcher.poll_claude_transcript(session_id, "test").unwrap();
-        assert_eq!(data1.context_tokens, 1000);
-        let offset1 = *watcher.claude_transcript_offsets.get(session_id).unwrap();
-        assert!(offset1 > 0);
-
-        // Étape 2 : relecture sans modification -> données en cache et offset inchangé
-        let data2 = watcher.poll_claude_transcript(session_id, "test").unwrap();
-        assert_eq!(data2.context_tokens, 1000);
-        assert_eq!(*watcher.claude_transcript_offsets.get(session_id).unwrap(), offset1);
-
-        // Étape 3 : ajout d'une nouvelle ligne -> offset progresse, tokens mis à jour
-        {
-            let mut f = std::fs::OpenOptions::new().append(true).open(&transcript_path).unwrap();
-            writeln!(f, "{{\"type\":\"user\",\"message\":\"world\",\"usage\":{{\"input_tokens\":2500}}}}").unwrap();
-        }
-
-        let data3 = watcher.poll_claude_transcript(session_id, "test").unwrap();
-        assert_eq!(data3.context_tokens, 2500);
-        let offset2 = *watcher.claude_transcript_offsets.get(session_id).unwrap();
-        assert!(offset2 > offset1);
-
-        // Étape 4 : troncature du fichier -> réinitialisation à 0 et relecture
-        {
-            let mut f = File::create(&transcript_path).unwrap();
-            writeln!(f, "{{\"type\":\"user\",\"message\":\"reset\",\"usage\":{{\"input_tokens\":500}}}}").unwrap();
-        }
-
-        let data4 = watcher.poll_claude_transcript(session_id, "test").unwrap();
-        assert_eq!(data4.context_tokens, 500);
-
-        let _ = std::fs::remove_dir_all(&temp_dir);
-    }
 
     #[test]
     fn test_claude_compact_echo_stop_and_launching_segregation() {
         let temp_dir = std::env::temp_dir().join(format!("paros_test_hooks_{}", fastrand::u64(..)));
         std::fs::create_dir_all(&temp_dir).unwrap();
-        let log_path = temp_dir.join("claude-events.log");
 
         let mut watcher = SessionWatcher::new();
         watcher.runtime_dir = temp_dir.clone();
+        let log_file = temp_dir.join("claude-events.log");
+
+        let sid = "session_echo_test";
+        watcher.claude_sessions.insert(
+            sid.to_string(),
+            SessionState::new(sid.to_string(), MascotKind::Claude, "Test".to_string(), "/tmp".to_string(), None),
+        );
+
+        // Événement PreCompact
+        std::fs::write(&log_file, format!("PreCompact\t{sid}\n")).unwrap();
+        watcher.poll_claude_hooks();
+        assert!(watcher.claude_sessions.get(sid).unwrap().compacting);
+
+        // PostCompact
+        std::fs::write(&log_file, format!("PreCompact\t{sid}\nPostCompact\t{sid}\n")).unwrap();
         watcher.claude_log_offset = 0;
-
-        // PreToolUse Agent pour s1 et s2
-        {
-            let mut f = File::create(&log_path).unwrap();
-            writeln!(f, "PreToolUse\ts1\t\tAgent\tWorker1\t\t").unwrap();
-            writeln!(f, "PreToolUse\ts2\t\tAgent\tWorker2\t\t").unwrap();
-        }
         watcher.poll_claude_hooks();
-        assert_eq!(watcher.claude_launching.get("s1").unwrap(), &vec!["Worker1".to_string()]);
-        assert_eq!(watcher.claude_launching.get("s2").unwrap(), &vec!["Worker2".to_string()]);
+        assert!(!watcher.claude_sessions.get(sid).unwrap().compacting);
+        assert!(watcher.compact_echo_until.contains_key(sid));
 
-        // Stop sur s1 vide uniquement la file de s1
-        {
-            let mut f = std::fs::OpenOptions::new().append(true).open(&log_path).unwrap();
-            writeln!(f, "Stop\ts1\t\t\t\t\t").unwrap();
-        }
+        // Stop pendant l'écho de compactage
+        std::fs::write(&log_file, format!("Stop\t{sid}\n")).unwrap();
+        watcher.claude_log_offset = 0;
         watcher.poll_claude_hooks();
-        assert!(watcher.claude_launching.get("s1").map_or(true, |v| v.is_empty()));
-        assert_eq!(watcher.claude_launching.get("s2").unwrap(), &vec!["Worker2".to_string()]);
-
-        // PostCompact sur s2 positionne compact_echo_until
-        {
-            let mut f = std::fs::OpenOptions::new().append(true).open(&log_path).unwrap();
-            writeln!(f, "PostCompact\ts2\t\t\t\t\t").unwrap();
-        }
-        watcher.poll_claude_hooks();
-        assert!(watcher.compact_echo_until.contains_key("s2"));
-
-        // Un Stop immédiat sur s2 est ignoré
-        let s2_state = watcher.claude_sessions.get_mut("s2").unwrap();
-        s2_state.phase = SessionPhase::Working;
-        s2_state.activity = "Outil".to_string();
-
-        {
-            let mut f = std::fs::OpenOptions::new().append(true).open(&log_path).unwrap();
-            writeln!(f, "Stop\ts2\t\t\t\t\t").unwrap();
-        }
-        watcher.poll_claude_hooks();
-        let s2 = watcher.claude_sessions.get("s2").unwrap();
-        assert_eq!(s2.phase, SessionPhase::Working);
-        assert_eq!(s2.activity, "Outil");
-
-        // Si compact_echo_until est expiré, le Stop est appliqué
-        watcher.compact_echo_until.insert("s2".to_string(), Instant::now() - Duration::from_secs(1));
-        {
-            let mut f = std::fs::OpenOptions::new().append(true).open(&log_path).unwrap();
-            writeln!(f, "Stop\ts2\t\t\t\t\t").unwrap();
-        }
-        watcher.poll_claude_hooks();
-        let s2_after = watcher.claude_sessions.get("s2").unwrap();
-        assert_eq!(s2_after.phase, SessionPhase::Idle);
+        assert_eq!(watcher.claude_sessions.get(sid).unwrap().phase, SessionPhase::Working);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

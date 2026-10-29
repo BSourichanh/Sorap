@@ -106,8 +106,11 @@ impl SessionWatcher {
         if known_subagents.contains(conv_id) {
             return true;
         }
-        // Les conversations de premier niveau disposent d'un fichier d'annotation .pbtxt.
+        // Les conversations de premier niveau disposent d'un fichier d'annotation .pbtxt ou d'un peer bridge.
         if data_dir.join("annotations").join(format!("{conv_id}.pbtxt")).exists() {
+            return false;
+        }
+        if self.home_dir.join(".agent-bridge/peers").join(format!("agy-{conv_id}.json")).exists() {
             return false;
         }
         for cand in &self.agy_candidate_dirs {

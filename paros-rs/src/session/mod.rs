@@ -8,13 +8,17 @@ pub mod types;
 pub mod mpris;
 pub mod git;
 pub mod proc;
+pub mod proc_scan;
+pub mod claude_tools;
 pub mod claude;
+pub mod agy_desktop;
 pub mod agy;
 pub mod agy_history;
 
 pub use types::{DesktopMetaEntry, GitCacheEntry, SessionPhase, SessionState, SubagentInfo};
 
 pub(crate) type SubagentHistoryCacheEntry = (u64, Vec<(String, String)>, HashSet<String>);
+pub(crate) type AgyConvDiscovery = (String, Option<i32>, PathBuf, Option<String>, Option<String>);
 
 pub struct SessionWatcher {
     pub(crate) agy_candidate_dirs: Vec<PathBuf>,
@@ -22,7 +26,7 @@ pub struct SessionWatcher {
     pub(crate) runtime_dir: PathBuf,
     pub(crate) home_dir: PathBuf,
 
-    pub(crate) cached_agy_convs: Vec<(String, Option<i32>, PathBuf)>,
+    pub(crate) cached_agy_convs: Vec<AgyConvDiscovery>,
     pub(crate) last_proc_scan: Instant,
 
     pub(crate) claude_log_offset: u64,
@@ -65,6 +69,7 @@ pub struct SessionWatcher {
     pub(crate) agy_subagent_history_cache: HashMap<String, SubagentHistoryCacheEntry>,
     pub(crate) desktop_meta: HashMap<String, DesktopMetaEntry>,
     pub(crate) last_desktop_db_mtime: Option<std::time::SystemTime>,
+    pub desktop_minutes: f32,
 }
 
 impl SessionWatcher {
@@ -76,6 +81,7 @@ impl SessionWatcher {
         let candidate_paths = vec![
             home.join(".gemini/antigravity-cli"),
             home.join(".gemini/antigravity"),
+            home.join(".gemini/antigravity-ide"),
             home.join("snap/antigravity-cli/common/.gemini/antigravity-cli"),
         ];
         let mut agy_candidate_dirs = Vec::new();
@@ -162,6 +168,7 @@ impl SessionWatcher {
             agy_subagent_history_cache: HashMap::new(),
             desktop_meta: HashMap::new(),
             last_desktop_db_mtime: None,
+            desktop_minutes: 10.0,
         }
     }
 
@@ -203,6 +210,7 @@ impl SessionWatcher {
             .insert(session_id.to_string(), (session_name.to_string(), Instant::now()));
     }
 
+    #[allow(dead_code)]
     pub(crate) fn find_collision_writer(&self, session_id: &str, path: &str) -> Option<String> {
         let now = Instant::now();
         if let Some(writers) = self.recent_file_writes.get(path) {
@@ -229,6 +237,11 @@ impl SessionWatcher {
             }
         }
         None
+    }
+
+    #[allow(dead_code)]
+    pub fn set_desktop_minutes(&mut self, minutes: f32) {
+        self.desktop_minutes = minutes;
     }
 
     #[allow(dead_code)]

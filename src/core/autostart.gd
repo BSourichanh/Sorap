@@ -34,7 +34,7 @@ static func set_enabled(enabled: bool) -> void:
 	else:
 		# Started with the variable already set: the app does not restart itself.
 		var variable := "%s=%s" % [InputMethod.VARIABLE, InputMethod.WITHOUT_SERVER]
-		file.store_string("[Desktop Entry]\nType=Application\nName=Paros\nExec=env %s %s\n" % [variable, command])
+		file.store_string("[Desktop Entry]\nType=Application\nName=Sorap\nExec=env %s %s\n" % [variable, command])
 
 
 static func _path() -> String:

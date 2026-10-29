@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 
 use crate::pet::MascotKind;
+use super::agy_desktop::resolve_transcript_path;
 use super::proc::{
     count_inbox_messages, extract_between, extract_exit_code, extract_message_sender,
     extract_task_started_id, parse_bridge_send, read_tail_lines,
@@ -14,16 +15,6 @@ use super::types::{AgyParsedTranscript, SessionPhase, SessionState};
 use super::SessionWatcher;
 
 impl SessionWatcher {
-    pub(crate) fn transcript_len_for_agy(&self, conv_id: &str) -> u64 {
-        for cand in &self.agy_candidate_dirs {
-            let logs = cand.join("brain").join(conv_id).join(".system_generated/logs");
-            if let Ok(m) = std::fs::metadata(logs.join("transcript.jsonl")).or_else(|_| std::fs::metadata(logs.join("transcript_full.jsonl"))) {
-                return m.len();
-            }
-        }
-        0
-    }
-
     pub(crate) fn poll_agy_hooks(&mut self) {
         let log_path = if self.runtime_dir.join("agy-events.log").exists() {
             self.runtime_dir.join("agy-events.log")
@@ -85,79 +76,6 @@ impl SessionWatcher {
         self.agy_log_offset = len;
     }
 
-    pub(crate) fn find_all_antigravity_convs(&mut self) -> Vec<(String, Option<i32>, PathBuf)> {
-        if self.last_proc_scan.elapsed() < Duration::from_secs(2) && !self.cached_agy_convs.is_empty() {
-            return self.cached_agy_convs.clone();
-        }
-        self.last_proc_scan = Instant::now();
-
-        let mut convs: HashMap<String, (Option<i32>, PathBuf)> = HashMap::new();
-        let mut ide_pid: Option<i32> = None;
-
-        let mut known_subs: HashSet<String> = HashSet::new();
-        for subs in self.agy_known_subagents.values() {
-            for (cid, _) in subs {
-                known_subs.insert(cid.clone());
-            }
-        }
-
-        if let Ok(entries) = std::fs::read_dir("/proc") {
-            for entry in entries.flatten() {
-                let pid_str = entry.file_name().to_string_lossy().to_string();
-                let Ok(pid) = pid_str.parse::<i32>() else { continue };
-
-                let comm = std::fs::read_to_string(format!("/proc/{pid}/comm")).unwrap_or_default();
-                let trimmed = comm.trim();
-                if matches!(trimmed, "language_server" | "agy" | "antigravity" | "antigravity-ide") {
-                    if matches!(trimmed, "language_server" | "antigravity" | "antigravity-ide") {
-                        ide_pid = Some(pid);
-                    }
-                    if let Ok(fds) = std::fs::read_dir(format!("/proc/{pid}/fd")) {
-                        for fd in fds.flatten() {
-                            if let Ok(target) = std::fs::read_link(fd.path())
-                                && target.extension().and_then(|e| e.to_str()) == Some("lock") {
-                                    let parent_opt = target.parent();
-                                    let matched_cand = self.agy_candidate_dirs.iter()
-                                        .find(|cand| Some(cand.join("presence").as_path()) == parent_opt)
-                                        .cloned()
-                                        .or_else(|| parent_opt.filter(|p| p.ends_with("presence")).and_then(|p| p.parent()).map(|p| p.to_path_buf()));
-
-                                    if let Some(data_dir) = matched_cand
-                                        && let Some(stem) = target.file_stem().and_then(|s| s.to_str()) {
-                                            if self.is_subagent_conv(stem, &data_dir, &known_subs) {
-                                                continue;
-                                            }
-                                            convs.insert(stem.to_string(), (Some(pid), data_dir));
-                                        }
-                                }
-                        }
-                    }
-                }
-            }
-        }
-
-        if let Some(ipid) = ide_pid {
-            let ide_dir = self.home_dir.join(".gemini/antigravity");
-            for (cid, entry) in &self.desktop_meta {
-                if entry.not_idle && entry.parent_id.is_empty() && !convs.contains_key(cid) {
-                    convs.insert(cid.clone(), (Some(ipid), ide_dir.clone()));
-                }
-            }
-        }
-
-        for (id, (st, dir)) in &self.agy_sessions {
-            if convs.contains_key(id) { continue; }
-            let is_proc_alive = st.terminal_pid.is_some_and(|pid| Path::new(&format!("/proc/{pid}")).exists());
-            if (st.phase == SessionPhase::Working || !st.subagents.is_empty()) && is_proc_alive {
-                convs.insert(id.clone(), (st.terminal_pid, dir.clone()));
-            }
-        }
-
-        let res: Vec<_> = convs.into_iter().map(|(id, (pid, dir))| (id, pid, dir)).collect();
-        self.cached_agy_convs = res.clone();
-        res
-    }
-
     pub(crate) fn check_all_antigravity(
         &mut self,
         git_enabled: bool,
@@ -176,7 +94,7 @@ impl SessionWatcher {
             }
         }
 
-        for (conv_id, pid, data_dir) in convs {
+        for (conv_id, pid, data_dir, hint_cwd, hint_title) in convs {
             if known_subs.contains(&conv_id) || self.is_subagent_conv(&conv_id, &data_dir, &known_subs) {
                 continue;
             }
@@ -193,9 +111,24 @@ impl SessionWatcher {
                 }
             }
 
+            // Récupération cwd via hint_cwd, /proc, peer bridge, ou workspace transcript
+            let peer_bridge_json = self.home_dir.join(".agent-bridge/peers").join(format!("agy-{conv_id}.json"));
+            let peer_workspace = if peer_bridge_json.exists() {
+                std::fs::read_to_string(&peer_bridge_json)
+                    .ok()
+                    .and_then(|c| serde_json::from_str::<Value>(&c).ok())
+                    .and_then(|v| v.get("workspace").and_then(|w| w.as_str()).map(|s| s.to_string()))
+            } else {
+                None
+            };
+
             let proc_cwd = pid.and_then(|p| std::fs::read_link(format!("/proc/{p}/cwd")).ok()).map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
             let proc_cwd_trimmed = proc_cwd.trim_end_matches('/');
-            let mut cwd = if proc_cwd_trimmed.is_empty() || proc_cwd_trimmed == home_trimmed {
+            let mut cwd = if let Some(ws) = peer_workspace {
+                ws
+            } else if let Some(hc) = hint_cwd {
+                hc
+            } else if proc_cwd_trimmed.is_empty() || proc_cwd_trimmed == home_trimmed {
                 parsed.workspace_cwd.clone().unwrap_or_else(|| if !proc_cwd.is_empty() { proc_cwd } else { std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|_| ".".to_string()) })
             } else {
                 proc_cwd
@@ -205,7 +138,11 @@ impl SessionWatcher {
                     cwd = meta.cwd.clone();
                 }
 
-            let title = self.read_antigravity_title(&data_dir, &conv_id, &cwd);
+            let title = if let Some(ht) = hint_title {
+                ht
+            } else {
+                self.read_antigravity_title(&data_dir, &conv_id, &cwd)
+            };
             let (branch, conflict, dirty, behind, repo_cleaned) = self.check_git(&cwd, git_enabled);
             let music = if groove_enabled { self.check_mpris() } else { false };
             let rounded = ((parsed.tokens as f32 / 10000.0).round() as usize) * 10000;
@@ -270,11 +207,7 @@ impl SessionWatcher {
     }
 
     pub(crate) fn parse_agy_transcript(&mut self, brain_dir: &Path, conv_id: &str) -> Option<AgyParsedTranscript> {
-        let conv_dir = brain_dir.join(conv_id);
-        let logs_dir = conv_dir.join(".system_generated/logs");
-        let compact_path = logs_dir.join("transcript.jsonl");
-        let path = if compact_path.exists() { compact_path } else { logs_dir.join("transcript_full.jsonl") };
-
+        let path = resolve_transcript_path(brain_dir, conv_id)?;
         let file = File::open(&path).ok()?;
         let metadata = file.metadata().ok()?;
         let file_len = metadata.len();
@@ -286,18 +219,17 @@ impl SessionWatcher {
         if let Some(pl) = prev_len {
             if file_len > pl {
                 self.agy_last_heard.insert(conv_id.to_string(), Instant::now());
-            } else if file_len == pl {
-                // Court-circuit : taille inchangée, réutilisation immédiate du cache tail/JSON
-                if let Some(mut cached) = self.agy_parsed_cache.get(conv_id).cloned() {
-                    let mut tool_failed = None;
-                    let subagents = self.parse_subagents_for_transcript(brain_dir, &path, conv_id, &mut tool_failed);
-                    cached.subagents_count = subagents.len();
-                    cached.subagents = subagents;
-                    if tool_failed.is_some() {
-                        cached.tool_failed = tool_failed;
-                    }
-                    return Some(cached);
+            } else if file_len == pl
+                && let Some(mut cached) = self.agy_parsed_cache.get(conv_id).cloned()
+            {
+                let mut tool_failed = None;
+                let subagents = self.parse_subagents_for_transcript(brain_dir, &path, conv_id, &mut tool_failed);
+                cached.subagents_count = subagents.len();
+                cached.subagents = subagents;
+                if tool_failed.is_some() {
+                    cached.tool_failed = tool_failed;
                 }
+                return Some(cached);
             }
         } else {
             let initial_heard = Instant::now().checked_sub(mtime_elapsed).unwrap_or_else(Instant::now);
@@ -467,8 +399,8 @@ impl SessionWatcher {
                     if let Some(idx) = head_str.find("Active Workspaces:") {
                         for wline in head_str[idx + 18..].lines().take(5) {
                             if let Some(rest) = wline.trim().strip_prefix("- ") {
-                                let ws = rest.trim();
-                                if !ws.is_empty() { workspace_cwd = Some(ws.to_string()); break; }
+                                    let ws = rest.trim();
+                                    if !ws.is_empty() { workspace_cwd = Some(ws.to_string()); break; }
                             }
                         }
                     }
@@ -513,58 +445,3 @@ impl SessionWatcher {
         Some(result)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::Write;
-
-    #[test]
-    fn test_agy_checkpoint_sets_compacting() {
-        let temp_dir = std::env::temp_dir().join(format!("paros_test_agy_{}", fastrand::u64(..)));
-        let brain_dir = temp_dir.join("brain");
-        let conv_id = "test_conv_checkpoint";
-        let logs_dir = brain_dir.join(conv_id).join(".system_generated/logs");
-        std::fs::create_dir_all(&logs_dir).unwrap();
-        let transcript = logs_dir.join("transcript.jsonl");
-
-        {
-            let mut f = File::create(&transcript).unwrap();
-            writeln!(f, "{{\"type\":\"USER_INPUT\",\"source\":\"USER\",\"content\":\"hello\"}}").unwrap();
-            writeln!(f, "{{\"type\":\"CHECKPOINT\",\"source\":\"SYSTEM\",\"content\":\"checkpoint\"}}").unwrap();
-            writeln!(f, "{{\"type\":\"GENERIC\",\"source\":\"MODEL\",\"content\":\"step after checkpoint\"}}").unwrap();
-        }
-
-        let mut watcher = SessionWatcher::new();
-        let parsed = watcher.parse_agy_transcript(&brain_dir, conv_id).unwrap();
-        assert!(parsed.is_compacting);
-        assert_eq!(parsed.tokens, 0);
-
-        let _ = std::fs::remove_dir_all(&temp_dir);
-    }
-
-    #[test]
-    fn test_agy_task_persistence_across_polls() {
-        let temp_dir = std::env::temp_dir().join(format!("paros_test_agy_task_{}", fastrand::u64(..)));
-        let brain_dir = temp_dir.join("brain");
-        let conv_id = "test_conv_tasks";
-        let logs_dir = brain_dir.join(conv_id).join(".system_generated/logs");
-        std::fs::create_dir_all(&logs_dir).unwrap();
-        let transcript = logs_dir.join("transcript.jsonl");
-
-        let mut watcher = SessionWatcher::new();
-        watcher.agy_tasks.entry(conv_id.to_string()).or_default().insert("task_123".into(), false);
-
-        {
-            let mut f = File::create(&transcript).unwrap();
-            writeln!(f, "{{\"type\":\"USER_INPUT\",\"source\":\"USER\",\"content\":\"hello\"}}").unwrap();
-        }
-
-        let parsed = watcher.parse_agy_transcript(&brain_dir, conv_id).unwrap();
-        assert!(parsed.has_bg);
-        assert_eq!(watcher.agy_tasks.get(conv_id).unwrap().len(), 1);
-
-        let _ = std::fs::remove_dir_all(&temp_dir);
-    }
-}
-

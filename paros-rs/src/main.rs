@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let my_pid = std::process::id() as i32;
         if other_pid != my_pid && std::path::Path::new(&format!("/proc/{}", other_pid)).exists() {
             println!(
-                "Une autre instance de Paros est déjà active (PID {}). Arrêt.",
+                "Une autre instance de Sorap est déjà active (PID {}). Arrêt.",
                 other_pid
             );
             return Ok(());
@@ -67,7 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = std::fs::write(&pid_file, format!("{}\n", std::process::id()));
     let _pid_guard = PidGuard(pid_file);
 
-    println!("Démarrage de paros-rs (multi-sessions, multi-écrans Hyprland & parité complète)...");
+    println!("Démarrage de Sorap (multi-sessions, multi-écrans Hyprland & parité complète)...");
     let conn = Connection::connect_to_env()?;
     let (globals, mut event_queue) = registry_queue_init(&conn)?;
     let qh = event_queue.handle();

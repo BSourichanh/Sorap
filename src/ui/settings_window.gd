@@ -29,6 +29,9 @@ const FIELDS := [
 	["claude", "sage_live", "Read the terminals to see the advisor at work"],
 	["claude", "context_window_k", "Model context, in thousands of tokens", 100, 2000, 100, "k"],
 	["git", "enabled", "Follow the git status of folders"],
+	["agy"],
+	["agy", "desktop", "Pets for Antigravity Desktop conversations"],
+	["agy", "desktop_minutes", "A Desktop pet leaves after an idle of", 1.0, 120.0, 1.0, "min"],
 	["Subagents"],
 	["subagents", "show", "A small pet for each subagent"],
 	["subagents", "max", "Small pets per session, at most", 1, 16, 1, ""],
@@ -64,7 +67,7 @@ var _autostart: CheckBox
 
 
 func _ready() -> void:
-	title = tr("Paros — Settings")
+	title = tr("Sorap — Settings")
 	add_to_group(Pets.SMOOTH_GROUP)
 	close_requested.connect(hide)
 	Events.sensed.connect(_on_sensed)
@@ -129,7 +132,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _on_sensed(event: StringName, _data: Dictionary) -> void:
 	if event == &"settings_requested":
 		_autostart.set_pressed_no_signal(Autostart.is_enabled())
-		title = tr("Paros — Settings")
+		title = tr("Sorap — Settings")
 		_fit_screen()
 		show()
 		grab_focus()

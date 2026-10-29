@@ -2,13 +2,7 @@
 
 [Français](../fr/architecture.md)
 
-Paros features two complementary execution engines:
-1. **Godot 4.7 Engine (GDScript)**: Modular event-bus architecture, described below.
-2. **Native Rust Engine (`paros-rs`)**: Optimized for Wayland Layer Shell, detailed in [Rust Architecture](architecture-rs.md).
-
-For entity states, subagents, sage, and flying letters, see [Lifecycle](lifecycle.md).
-
-## Principle (Godot Engine)
+## Principle
 
 ```
 senses ──post──▶ Events ──listened by──▶ brain ──orders──▶ pets ──read by──▶ body
@@ -39,7 +33,7 @@ Adding a feature nearly always comes down to: a sense that posts an event, a rul
 | `autostart.gd` | Start at login. Class `Autostart` |
 | **`src/senses/`** | |
 | `claude_code_sense.gd` | Claude Code sessions: registry, transcripts, hook log |
-| `agy_sense.gd` | agy sessions: processes, titles, transcripts, inboxes of Diaulos, hook log |
+| `agy_sense.gd` | agy sessions: processes (agy CLI, language servers of Antigravity Desktop), titles, transcripts, inboxes and peer files of Diaulos, hook log |
 | `git_sense.gd` | Git status of the folder of each session |
 | `desktop_sense.gd` | File written by the GNOME extension, or by the Windows helper: focused window, pointer, lock, full screen |
 | `system_sense.gd` | Temperature, load, battery |
